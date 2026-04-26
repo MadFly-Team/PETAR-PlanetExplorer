@@ -15,8 +15,6 @@ The follow captured video is jerky,  but it demonstrates the core gameplay syste
   Your browser does not support embedded video playback. Download the video from <code>./Graphics/Videos/petar.mp4</code>.
 </video>
 
----
-
 ## Table of Contents
 
 - [Overview](#overview)
