@@ -1,0 +1,26 @@
+[2026-04-04T23:15:26.0721120Z] [Info] [Thread 1] Debug logging initialized. Writing to 'D:\NewProjects\Games\PETAR-PlanetExplorer\PETAR-PlanetExplorer\bin\Debug\net8.0\logs\PETAR-PlanetExplorer-20260404-231526.log'.
+[2026-04-04T23:15:26.0734432Z] [Info] [Thread 1] Starting game runtime.
+[2026-04-04T23:15:26.4589700Z] [Debug] [Thread 1] PETARPlanetExplorer instance created.
+[2026-04-04T23:15:26.9164774Z] [Debug] [Thread 1] Initializing game systems.
+[2026-04-04T23:15:27.0115627Z] [Debug] [Thread 1] Game content loaded.
+[2026-04-04T23:15:27.0116328Z] [Info] [Thread 1] Loaded font resource 'Fonts/SpaceFont'.
+[2026-04-04T23:15:27.0128968Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291 on background threads.
+[2026-04-04T23:15:28.9873428Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-04T23:15:34.7379866Z] [Info] [Thread 1] Fullscreen toggled. Enabled: True.
+[2026-04-04T23:15:38.4560927Z] [Info] [Thread 1] View mode toggled. Plan view enabled: False.
+[2026-04-04T23:16:36.7986535Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 395339888 on background threads.
+[2026-04-04T23:16:38.6528311Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 395339888.
+[2026-04-04T23:17:01.6621467Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 621446466 on background threads.
+[2026-04-04T23:17:03.5391354Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 621446466.
+[2026-04-04T23:23:08.6679363Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 673294428 on background threads.
+[2026-04-04T23:23:10.5351944Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 673294428.
+[2026-04-04T23:25:00.6636586Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 632545830 on background threads.
+[2026-04-04T23:25:02.6142058Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 632545830.
+[2026-04-04T23:25:09.9381392Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 1701757152 on background threads.
+[2026-04-04T23:25:11.5512285Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 1701757152.
+[2026-04-04T23:25:13.9898695Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 1508060162 on background threads.
+[2026-04-04T23:25:15.5972763Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 1508060162.
+[2026-04-04T23:26:19.3276605Z] [Info] [Thread 1] Exit requested by player input.
+[2026-04-04T23:26:19.3281466Z] [Debug] [Thread 1] Unloading game content.
+[2026-04-04T23:26:19.3285944Z] [Info] [Thread 1] Game runtime stopped normally.
+[2026-04-04T23:26:20.3866376Z] [Info] [Thread 1] Shutting down debug logging.

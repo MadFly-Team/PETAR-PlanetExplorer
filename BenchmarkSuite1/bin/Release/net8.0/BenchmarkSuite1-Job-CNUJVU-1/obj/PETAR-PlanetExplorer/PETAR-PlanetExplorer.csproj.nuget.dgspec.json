@@ -1,0 +1,83 @@
+{
+  "format": 1,
+  "restore": {
+    "D:\\NewProjects\\Games\\PETAR-PlanetExplorer\\PETAR-PlanetExplorer\\PETAR-PlanetExplorer.csproj": {}
+  },
+  "projects": {
+    "D:\\NewProjects\\Games\\PETAR-PlanetExplorer\\PETAR-PlanetExplorer\\PETAR-PlanetExplorer.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "D:\\NewProjects\\Games\\PETAR-PlanetExplorer\\PETAR-PlanetExplorer\\PETAR-PlanetExplorer.csproj",
+        "projectName": "PETAR-PlanetExplorer",
+        "projectPath": "D:\\NewProjects\\Games\\PETAR-PlanetExplorer\\PETAR-PlanetExplorer\\PETAR-PlanetExplorer.csproj",
+        "packagesPath": "C:\\Users\\neilb\\.nuget\\packages\\",
+        "outputPath": "D:\\NewProjects\\Games\\PETAR-PlanetExplorer\\BenchmarkSuite1\\bin\\Release\\net8.0\\BenchmarkSuite1-Job-CNUJVU-1/\\obj\\PETAR-PlanetExplorer\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\neilb\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.200"
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "dependencies": {
+            "MonoGame.Content.Builder.Task": {
+              "target": "Package",
+              "version": "[3.8.*, )"
+            },
+            "MonoGame.Framework.DesktopGL": {
+              "target": "Package",
+              "version": "[3.8.*, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.201/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

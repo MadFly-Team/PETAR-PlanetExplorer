@@ -1,0 +1,10 @@
+[2026-04-03T10:48:23.5361342Z] [Info] [Thread 1] Debug logging initialized. Writing to 'D:\NewProjects\Games\PETAR-PlanetExplorer\PETAR-PlanetExplorer\bin\Debug\net8.0\logs\PETAR-PlanetExplorer-20260403-104823.log'.
+[2026-04-03T10:48:23.5381573Z] [Info] [Thread 1] Starting game runtime.
+[2026-04-03T10:48:23.9241311Z] [Debug] [Thread 1] Game1 instance created.
+[2026-04-03T10:48:24.2467989Z] [Debug] [Thread 1] Initializing game systems.
+[2026-04-03T10:48:38.4597757Z] [Debug] [Thread 1] Game content loaded.
+[2026-04-03T10:48:38.4598578Z] [Info] [Thread 1] Loaded font resource 'Fonts/SpaceFont'.
+[2026-04-03T10:48:38.4598863Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-03T10:48:56.6343505Z] [Debug] [Thread 1] Unloading game content.
+[2026-04-03T10:48:56.6359119Z] [Info] [Thread 1] Game runtime stopped normally.
+[2026-04-03T10:48:56.6929627Z] [Info] [Thread 1] Shutting down debug logging.

@@ -1,0 +1,20 @@
+[2026-04-25T12:54:55.7440265Z] [Info] [Thread 1] Debug logging initialized. Writing to 'D:\NewProjects\Games\PETAR-PlanetExplorer\PETAR-PlanetExplorer\bin\Debug\net8.0\logs\PETAR-PlanetExplorer-20260425-125455.log'.
+[2026-04-25T12:54:55.7453259Z] [Info] [Thread 1] Starting game runtime.
+[2026-04-25T12:54:56.1191991Z] [Debug] [Thread 1] PETARPlanetExplorer instance created.
+[2026-04-25T12:54:56.4728664Z] [Debug] [Thread 1] Initializing game systems.
+[2026-04-25T12:54:56.5641432Z] [Debug] [Thread 1] Game content loaded.
+[2026-04-25T12:54:56.5642081Z] [Info] [Thread 1] Loaded font resource 'Fonts/SpaceFont'.
+[2026-04-25T12:54:56.5681923Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291, theme Earth, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T12:54:59.9787570Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-25T12:55:04.8222038Z] [Info] [Thread 1] View mode toggled. Plan view enabled: False.
+[2026-04-25T12:55:19.9922006Z] [Info] [Thread 1] Custom generation settings updated. Theme: Driftholm, mountains: 1.00, volcanoes: 0.20, craters: 0.35, gorges: 0.25.
+[2026-04-25T12:55:19.9944513Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291, theme Driftholm, mountains 1.00, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T12:55:23.2108335Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-25T12:55:29.4989813Z] [Info] [Thread 1] Fullscreen toggled. Enabled: True.
+[2026-04-25T12:57:27.1074719Z] [Info] [Thread 1] Custom generation settings updated. Theme: Hyperion Delta, mountains: 0.05, volcanoes: 0.20, craters: 0.35, gorges: 0.99.
+[2026-04-25T12:57:27.1085998Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291, theme Hyperion Delta, mountains 0.05, volcanoes 0.20, craters 0.35, gorges 0.99.
+[2026-04-25T12:57:30.4086861Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-25T12:58:32.7741555Z] [Info] [Thread 1] Exit requested by player input.
+[2026-04-25T12:58:32.7746644Z] [Debug] [Thread 1] Unloading game content.
+[2026-04-25T12:58:32.7751494Z] [Info] [Thread 1] Game runtime stopped normally.
+[2026-04-25T12:58:34.0010852Z] [Info] [Thread 1] Shutting down debug logging.

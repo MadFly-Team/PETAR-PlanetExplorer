@@ -1,0 +1,29 @@
+[2026-04-25T11:14:28.9011926Z] [Info] [Thread 1] Debug logging initialized. Writing to 'D:\NewProjects\Games\PETAR-PlanetExplorer\PETAR-PlanetExplorer\bin\Debug\net8.0\logs\PETAR-PlanetExplorer-20260425-111428.log'.
+[2026-04-25T11:14:28.9032291Z] [Info] [Thread 1] Starting game runtime.
+[2026-04-25T11:14:29.3202768Z] [Debug] [Thread 1] PETARPlanetExplorer instance created.
+[2026-04-25T11:14:29.6620136Z] [Debug] [Thread 1] Initializing game systems.
+[2026-04-25T11:14:29.7580267Z] [Debug] [Thread 1] Game content loaded.
+[2026-04-25T11:14:29.7580753Z] [Info] [Thread 1] Loaded font resource 'Fonts/SpaceFont'.
+[2026-04-25T11:14:29.7626778Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291, theme Earth, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T11:14:32.9395427Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-25T11:14:34.7043384Z] [Info] [Thread 1] View mode toggled. Plan view enabled: False.
+[2026-04-25T11:14:39.0371458Z] [Info] [Thread 1] Fullscreen toggled. Enabled: True.
+[2026-04-25T11:15:31.7212650Z] [Info] [Thread 1] Custom generation settings updated. Theme: Earth, mountains: 0.55, volcanoes: 0.20, craters: 0.35, gorges: 0.25.
+[2026-04-25T11:15:31.7235808Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291, theme Earth, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T11:15:34.7877617Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-25T11:17:00.3213349Z] [Info] [Thread 1] Custom generation settings updated. Theme: Mercury, mountains: 0.55, volcanoes: 0.20, craters: 0.35, gorges: 0.25.
+[2026-04-25T11:17:00.3217637Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291, theme Mercury, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T11:17:03.4585072Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-25T11:18:53.8548963Z] [Info] [Thread 1] Custom generation settings updated. Theme: Mercury, mountains: 0.71, volcanoes: 0.97, craters: 0.98, gorges: 0.53.
+[2026-04-25T11:18:53.8554205Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291, theme Mercury, mountains 0.71, volcanoes 0.97, craters 0.98, gorges 0.53.
+[2026-04-25T11:18:56.8399265Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-25T11:19:59.4217071Z] [Info] [Thread 1] Custom generation settings updated. Theme: Mercury, mountains: 0.00, volcanoes: 0.00, craters: 0.98, gorges: 0.00.
+[2026-04-25T11:19:59.4222328Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291, theme Mercury, mountains 0.00, volcanoes 0.00, craters 0.98, gorges 0.00.
+[2026-04-25T11:20:02.5252943Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-25T11:21:29.4552126Z] [Info] [Thread 1] Custom generation settings updated. Theme: Mercury, mountains: 0.00, volcanoes: 0.00, craters: 0.00, gorges: 0.00.
+[2026-04-25T11:21:29.4558030Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291, theme Mercury, mountains 0.00, volcanoes 0.00, craters 0.00, gorges 0.00.
+[2026-04-25T11:21:32.4433303Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-25T11:21:48.7052226Z] [Info] [Thread 1] Exit requested by player input.
+[2026-04-25T11:21:48.7057530Z] [Debug] [Thread 1] Unloading game content.
+[2026-04-25T11:21:48.7061376Z] [Info] [Thread 1] Game runtime stopped normally.
+[2026-04-25T11:21:49.5252308Z] [Info] [Thread 1] Shutting down debug logging.
