@@ -5,6 +5,16 @@ It generates large stylized planets, lets the player switch between a strategic 
 
 This README is intended to document the current state of the project for development, maintenance, and GitHub check-in.
 
+## Main Game View
+
+![PETAR-PlanetExplorer main game view](./Graphics/ScreenShots/PETAR1.jpg)
+
+The follow captured video is jerky,  but it demonstrates the core gameplay systems in action. The game runs in 60 frames at present.
+
+<video src="./Graphics/Videos/petar.mp4" controls muted loop playsinline width="960">
+  Your browser does not support embedded video playback. Download the video from <code>./Graphics/Videos/petar.mp4</code>.
+</video>
+
 ---
 
 ## Table of Contents
