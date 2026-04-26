@@ -1,0 +1,204 @@
+// Validating benchmarks:
+// ***** BenchmarkRunner: Start   *****
+// ***** Found 1 benchmark(s) in total *****
+// ***** Building 1 exe(s) in Parallel: Start   *****
+// start dotnet  restore /p:UseSharedCompilation=false /p:BuildInParallel=false /m:1 /p:Deterministic=true /p:Optimize=true /p:ArtifactsPath="D:\NewProjects\Games\PETAR-PlanetExplorer\BenchmarkSuite1\bin\Release\net8.0\BenchmarkSuite1-Job-CNUJVU-1/" /p:OutDir="D:\NewProjects\Games\PETAR-PlanetExplorer\BenchmarkSuite1\bin\Release\net8.0\BenchmarkSuite1-Job-CNUJVU-1\bin\Release\net8.0/" /p:OutputPath="D:\NewProjects\Games\PETAR-PlanetExplorer\BenchmarkSuite1\bin\Release\net8.0\BenchmarkSuite1-Job-CNUJVU-1\bin\Release\net8.0/" /p:PublishDir="D:\NewProjects\Games\PETAR-PlanetExplorer\BenchmarkSuite1\bin\Release\net8.0\BenchmarkSuite1-Job-CNUJVU-1\publish/" in D:\NewProjects\Games\PETAR-PlanetExplorer\BenchmarkSuite1\bin\Release\net8.0\BenchmarkSuite1-Job-CNUJVU-1
+// command took 1.38 sec and exited with 0
+// start dotnet  build -c Release --no-restore /p:UseSharedCompilation=false /p:BuildInParallel=false /m:1 /p:Deterministic=true /p:Optimize=true /p:ArtifactsPath="D:\NewProjects\Games\PETAR-PlanetExplorer\BenchmarkSuite1\bin\Release\net8.0\BenchmarkSuite1-Job-CNUJVU-1/" /p:OutDir="D:\NewProjects\Games\PETAR-PlanetExplorer\BenchmarkSuite1\bin\Release\net8.0\BenchmarkSuite1-Job-CNUJVU-1\bin\Release\net8.0/" /p:OutputPath="D:\NewProjects\Games\PETAR-PlanetExplorer\BenchmarkSuite1\bin\Release\net8.0\BenchmarkSuite1-Job-CNUJVU-1\bin\Release\net8.0/" /p:PublishDir="D:\NewProjects\Games\PETAR-PlanetExplorer\BenchmarkSuite1\bin\Release\net8.0\BenchmarkSuite1-Job-CNUJVU-1\publish/" --output "D:\NewProjects\Games\PETAR-PlanetExplorer\BenchmarkSuite1\bin\Release\net8.0\BenchmarkSuite1-Job-CNUJVU-1\bin\Release\net8.0/" in D:\NewProjects\Games\PETAR-PlanetExplorer\BenchmarkSuite1\bin\Release\net8.0\BenchmarkSuite1-Job-CNUJVU-1
+// command took 6.27 sec and exited with 0
+// ***** Done, took 00:00:07 (7.74 sec)   *****
+// Found 1 benchmarks:
+//   HeightMapFlyoverRendererWaterCacheMissBenchmark.WaterCacheMissFrame: Job-CNUJVU(InvocationCount=1, UnrollFactor=1)
+
+Setup power plan (GUID: 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c FriendlyName: High performance)
+// **************************
+// Benchmark: HeightMapFlyoverRendererWaterCacheMissBenchmark.WaterCacheMissFrame: Job-CNUJVU(InvocationCount=1, UnrollFactor=1)
+// *** Execute ***
+// Launch: 1 / 1
+// Execute: dotnet BenchmarkSuite1-Job-CNUJVU-1.dll --anonymousPipes 1808 1860 --benchmarkName PETAR_PlanetExplorer.Performance.HeightMapFlyoverRendererWaterCacheMissBenchmark.WaterCacheMissFrame --job "InvocationCount=1, UnrollFactor=1" --benchmarkId 0 in D:\NewProjects\Games\PETAR-PlanetExplorer\BenchmarkSuite1\bin\Release\net8.0\BenchmarkSuite1-Job-CNUJVU-1\bin\Release\net8.0
+// BeforeAnythingElse
+
+// Benchmark Process Environment Information:
+// BenchmarkDotNet v0.15.2
+// Runtime=.NET 8.0.25 (8.0.2526.11203), X64 RyuJIT AVX2
+// GC=Concurrent Workstation
+// HardwareIntrinsics=AVX2,AES,BMI1,BMI2,FMA,LZCNT,PCLMUL,POPCNT VectorSize=256
+// Job: Job-CNUJVU(InvocationCount=1, UnrollFactor=1)
+
+OverheadJitting  1: 1 op, 122900.00 ns, 122.9000 us/op
+WorkloadJitting  1: 1 op, 22701400.00 ns, 22.7014 ms/op
+
+OverheadWarmup   1: 1 op, 300.00 ns, 300.0000 ns/op
+OverheadWarmup   2: 1 op, 300.00 ns, 300.0000 ns/op
+OverheadWarmup   3: 1 op, 200.00 ns, 200.0000 ns/op
+OverheadWarmup   4: 1 op, 200.00 ns, 200.0000 ns/op
+OverheadWarmup   5: 1 op, 200.00 ns, 200.0000 ns/op
+
+OverheadActual   1: 1 op, 300.00 ns, 300.0000 ns/op
+OverheadActual   2: 1 op, 400.00 ns, 400.0000 ns/op
+OverheadActual   3: 1 op, 300.00 ns, 300.0000 ns/op
+OverheadActual   4: 1 op, 200.00 ns, 200.0000 ns/op
+OverheadActual   5: 1 op, 100.00 ns, 100.0000 ns/op
+OverheadActual   6: 1 op, 100.00 ns, 100.0000 ns/op
+OverheadActual   7: 1 op, 100.00 ns, 100.0000 ns/op
+OverheadActual   8: 1 op, 100.00 ns, 100.0000 ns/op
+OverheadActual   9: 1 op, 100.00 ns, 100.0000 ns/op
+OverheadActual  10: 1 op, 100.00 ns, 100.0000 ns/op
+OverheadActual  11: 1 op, 400.00 ns, 400.0000 ns/op
+OverheadActual  12: 1 op, 300.00 ns, 300.0000 ns/op
+OverheadActual  13: 1 op, 300.00 ns, 300.0000 ns/op
+OverheadActual  14: 1 op, 200.00 ns, 200.0000 ns/op
+OverheadActual  15: 1 op, 200.00 ns, 200.0000 ns/op
+OverheadActual  16: 1 op, 200.00 ns, 200.0000 ns/op
+OverheadActual  17: 1 op, 200.00 ns, 200.0000 ns/op
+OverheadActual  18: 1 op, 200.00 ns, 200.0000 ns/op
+OverheadActual  19: 1 op, 200.00 ns, 200.0000 ns/op
+OverheadActual  20: 1 op, 200.00 ns, 200.0000 ns/op
+
+OverheadWarmup   1: 1 op, 200.00 ns, 200.0000 ns/op
+OverheadWarmup   2: 1 op, 200.00 ns, 200.0000 ns/op
+OverheadWarmup   3: 1 op, 200.00 ns, 200.0000 ns/op
+OverheadWarmup   4: 1 op, 300.00 ns, 300.0000 ns/op
+OverheadWarmup   5: 1 op, 200.00 ns, 200.0000 ns/op
+OverheadWarmup   6: 1 op, 100.00 ns, 100.0000 ns/op
+
+// BeforeActualRun
+WorkloadActual   1: 1 op, 10496900.00 ns, 10.4969 ms/op
+WorkloadActual   2: 1 op, 11121900.00 ns, 11.1219 ms/op
+WorkloadActual   3: 1 op, 10741700.00 ns, 10.7417 ms/op
+WorkloadActual   4: 1 op, 11151000.00 ns, 11.1510 ms/op
+WorkloadActual   5: 1 op, 10497200.00 ns, 10.4972 ms/op
+WorkloadActual   6: 1 op, 11434400.00 ns, 11.4344 ms/op
+WorkloadActual   7: 1 op, 10905100.00 ns, 10.9051 ms/op
+WorkloadActual   8: 1 op, 10966000.00 ns, 10.9660 ms/op
+WorkloadActual   9: 1 op, 10705100.00 ns, 10.7051 ms/op
+WorkloadActual  10: 1 op, 10388500.00 ns, 10.3885 ms/op
+WorkloadActual  11: 1 op, 10657900.00 ns, 10.6579 ms/op
+WorkloadActual  12: 1 op, 10712900.00 ns, 10.7129 ms/op
+WorkloadActual  13: 1 op, 11317000.00 ns, 11.3170 ms/op
+WorkloadActual  14: 1 op, 10386000.00 ns, 10.3860 ms/op
+WorkloadActual  15: 1 op, 10840100.00 ns, 10.8401 ms/op
+WorkloadActual  16: 1 op, 10855500.00 ns, 10.8555 ms/op
+WorkloadActual  17: 1 op, 10757000.00 ns, 10.7570 ms/op
+WorkloadActual  18: 1 op, 10381600.00 ns, 10.3816 ms/op
+WorkloadActual  19: 1 op, 10351400.00 ns, 10.3514 ms/op
+WorkloadActual  20: 1 op, 11175500.00 ns, 11.1755 ms/op
+WorkloadActual  21: 1 op, 10427200.00 ns, 10.4272 ms/op
+WorkloadActual  22: 1 op, 10384100.00 ns, 10.3841 ms/op
+WorkloadActual  23: 1 op, 10642500.00 ns, 10.6425 ms/op
+WorkloadActual  24: 1 op, 10211300.00 ns, 10.2113 ms/op
+WorkloadActual  25: 1 op, 10778000.00 ns, 10.7780 ms/op
+WorkloadActual  26: 1 op, 11367900.00 ns, 11.3679 ms/op
+WorkloadActual  27: 1 op, 10639800.00 ns, 10.6398 ms/op
+WorkloadActual  28: 1 op, 10527000.00 ns, 10.5270 ms/op
+WorkloadActual  29: 1 op, 10703900.00 ns, 10.7039 ms/op
+WorkloadActual  30: 1 op, 11149500.00 ns, 11.1495 ms/op
+WorkloadActual  31: 1 op, 11044200.00 ns, 11.0442 ms/op
+WorkloadActual  32: 1 op, 10977800.00 ns, 10.9778 ms/op
+
+// AfterActualRun
+WorkloadResult   1: 1 op, 10496700.00 ns, 10.4967 ms/op
+WorkloadResult   2: 1 op, 11121700.00 ns, 11.1217 ms/op
+WorkloadResult   3: 1 op, 10741500.00 ns, 10.7415 ms/op
+WorkloadResult   4: 1 op, 11150800.00 ns, 11.1508 ms/op
+WorkloadResult   5: 1 op, 10497000.00 ns, 10.4970 ms/op
+WorkloadResult   6: 1 op, 11434200.00 ns, 11.4342 ms/op
+WorkloadResult   7: 1 op, 10904900.00 ns, 10.9049 ms/op
+WorkloadResult   8: 1 op, 10965800.00 ns, 10.9658 ms/op
+WorkloadResult   9: 1 op, 10704900.00 ns, 10.7049 ms/op
+WorkloadResult  10: 1 op, 10388300.00 ns, 10.3883 ms/op
+WorkloadResult  11: 1 op, 10657700.00 ns, 10.6577 ms/op
+WorkloadResult  12: 1 op, 10712700.00 ns, 10.7127 ms/op
+WorkloadResult  13: 1 op, 11316800.00 ns, 11.3168 ms/op
+WorkloadResult  14: 1 op, 10385800.00 ns, 10.3858 ms/op
+WorkloadResult  15: 1 op, 10839900.00 ns, 10.8399 ms/op
+WorkloadResult  16: 1 op, 10855300.00 ns, 10.8553 ms/op
+WorkloadResult  17: 1 op, 10756800.00 ns, 10.7568 ms/op
+WorkloadResult  18: 1 op, 10381400.00 ns, 10.3814 ms/op
+WorkloadResult  19: 1 op, 10351200.00 ns, 10.3512 ms/op
+WorkloadResult  20: 1 op, 11175300.00 ns, 11.1753 ms/op
+WorkloadResult  21: 1 op, 10427000.00 ns, 10.4270 ms/op
+WorkloadResult  22: 1 op, 10383900.00 ns, 10.3839 ms/op
+WorkloadResult  23: 1 op, 10642300.00 ns, 10.6423 ms/op
+WorkloadResult  24: 1 op, 10211100.00 ns, 10.2111 ms/op
+WorkloadResult  25: 1 op, 10777800.00 ns, 10.7778 ms/op
+WorkloadResult  26: 1 op, 11367700.00 ns, 11.3677 ms/op
+WorkloadResult  27: 1 op, 10639600.00 ns, 10.6396 ms/op
+WorkloadResult  28: 1 op, 10526800.00 ns, 10.5268 ms/op
+WorkloadResult  29: 1 op, 10703700.00 ns, 10.7037 ms/op
+WorkloadResult  30: 1 op, 11149300.00 ns, 11.1493 ms/op
+WorkloadResult  31: 1 op, 11044000.00 ns, 11.0440 ms/op
+WorkloadResult  32: 1 op, 10977600.00 ns, 10.9776 ms/op
+// GC:  0 0 0 4160 1
+// Threading:  0 0 1
+
+// AfterAll
+// Benchmark Process 15480 has exited with code 0.
+
+Mean = 10.772 ms, StdErr = 0.058 ms (0.54%), N = 32, StdDev = 0.328 ms
+Min = 10.211 ms, Q1 = 10.497 ms, Median = 10.727 ms, Q3 = 10.994 ms, Max = 11.434 ms
+IQR = 0.497 ms, LowerFence = 9.751 ms, UpperFence = 11.740 ms
+ConfidenceInterval = [10.561 ms; 10.982 ms] (CI 99.9%), Margin = 0.210 ms (1.95% of Mean)
+Skewness = 0.3, Kurtosis = 2.03, MValue = 2
+
+// ** Remained 0 (0.0%) benchmark(s) to run. Estimated finish 2026-04-04 22:52 (0h 0m from now) **
+Successfully reverted power plan (GUID: 381b4222-f694-41f0-9685-ff5bb260df2e FriendlyName: Balanced)
+// ***** BenchmarkRunner: Finish  *****
+
+// * Export *
+  BenchmarkDotNet.Artifacts\results\PETAR_PlanetExplorer.Performance.HeightMapFlyoverRendererWaterCacheMissBenchmark-report.csv
+  BenchmarkDotNet.Artifacts\results\PETAR_PlanetExplorer.Performance.HeightMapFlyoverRendererWaterCacheMissBenchmark-report-github.md
+  BenchmarkDotNet.Artifacts\results\PETAR_PlanetExplorer.Performance.HeightMapFlyoverRendererWaterCacheMissBenchmark-report.html
+
+// * Detailed results *
+HeightMapFlyoverRendererWaterCacheMissBenchmark.WaterCacheMissFrame: Job-CNUJVU(InvocationCount=1, UnrollFactor=1)
+Runtime = .NET 8.0.25 (8.0.2526.11203), X64 RyuJIT AVX2; GC = Concurrent Workstation
+Mean = 10.772 ms, StdErr = 0.058 ms (0.54%), N = 32, StdDev = 0.328 ms
+Min = 10.211 ms, Q1 = 10.497 ms, Median = 10.727 ms, Q3 = 10.994 ms, Max = 11.434 ms
+IQR = 0.497 ms, LowerFence = 9.751 ms, UpperFence = 11.740 ms
+ConfidenceInterval = [10.561 ms; 10.982 ms] (CI 99.9%), Margin = 0.210 ms (1.95% of Mean)
+Skewness = 0.3, Kurtosis = 2.03, MValue = 2
+-------------------- Histogram --------------------
+[10.076 ms ; 10.304 ms) | @
+[10.304 ms ; 10.574 ms) | @@@@@@@@@
+[10.574 ms ; 10.908 ms) | @@@@@@@@@@@@
+[10.908 ms ; 11.206 ms) | @@@@@@@
+[11.206 ms ; 11.511 ms) | @@@
+---------------------------------------------------
+
+// * Summary *
+
+BenchmarkDotNet v0.15.2, Windows 11 (10.0.26200.8117)
+Intel Core i9-10900KF CPU 3.70GHz, 1 CPU, 20 logical and 10 physical cores
+.NET SDK 10.0.201
+  [Host]     : .NET 8.0.25 (8.0.2526.11203), X64 RyuJIT AVX2
+  Job-CNUJVU : .NET 8.0.25 (8.0.2526.11203), X64 RyuJIT AVX2
+
+InvocationCount=1  UnrollFactor=1  
+
+| Method              | Mean     | Error    | StdDev   |
+|-------------------- |---------:|---------:|---------:|
+| WaterCacheMissFrame | 10.77 ms | 0.210 ms | 0.328 ms |
+
+// * Warnings *
+MinIterationTime
+  HeightMapFlyoverRendererWaterCacheMissBenchmark.WaterCacheMissFrame: InvocationCount=1, UnrollFactor=1 -> The minimum observed iteration time is 10.211ms which is very small. It's recommended to increase it to at least 100ms using more operations.
+
+// * Legends *
+  Mean   : Arithmetic mean of all measurements
+  Error  : Half of 99.9% confidence interval
+  StdDev : Standard deviation of all measurements
+  1 ms   : 1 Millisecond (0.001 sec)
+
+// * Diagnostic Output - CPUUsageDiagnoser *
+Saving diagsession as a directory. This may take a moment...
+Exported diagsession file: D:\NewProjects\Games\PETAR-PlanetExplorer\BenchmarkSuite1\bin\Release\net8.0\BenchmarkDotNet.Artifacts\BenchmarkDotNet_HeightMapFlyoverRendererWaterCacheMissBenchmark_20260404_225223.
+Opening diagsession in VisualStudio: 25624
+
+
+// ***** BenchmarkRunner: End *****
+Run time: 00:00:05 (5.51 sec), executed benchmarks: 1
+
+Global total time: 00:00:16 (16.83 sec), executed benchmarks: 1
+// * Artifacts cleanup *
+Artifacts cleanup is finished

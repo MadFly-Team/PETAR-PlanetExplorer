@@ -1,4 +1,8 @@
 # Copilot Instructions
 
+## General Guidelines
+- Continue execution through all plan steps without pausing for interim status-only messages.
+
 ## Project Guidelines
-- When the user asks for Worms-style terrain, they mean large overhanging land sections and folded-back silhouettes rather than side ridges at the map edges. Prefer broad cliff-attached overhang masses with hollowed undersides, not thin lips, contour bands, or edge ridges.
+- When adjusting the voxel landscape vertical normalization in this project, use a height limit of 48 instead of 32.
+- When rendering landed oil rigs in this project, place them on the impacted voxel center and at that cube's top height so they remain visible

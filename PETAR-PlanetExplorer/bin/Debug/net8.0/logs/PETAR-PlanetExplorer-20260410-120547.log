@@ -1,0 +1,36 @@
+[2026-04-10T12:05:47.5093567Z] [Info] [Thread 1] Debug logging initialized. Writing to 'D:\NewProjects\Games\PETAR-PlanetExplorer\PETAR-PlanetExplorer\bin\Debug\net8.0\logs\PETAR-PlanetExplorer-20260410-120547.log'.
+[2026-04-10T12:05:47.5110681Z] [Info] [Thread 1] Starting game runtime.
+[2026-04-10T12:05:48.0908470Z] [Debug] [Thread 1] PETARPlanetExplorer instance created.
+[2026-04-10T12:05:48.4675774Z] [Debug] [Thread 1] Initializing game systems.
+[2026-04-10T12:05:48.5715361Z] [Debug] [Thread 1] Game content loaded.
+[2026-04-10T12:05:48.5715886Z] [Info] [Thread 1] Loaded font resource 'Fonts/SpaceFont'.
+[2026-04-10T12:05:48.5729507Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291 with 24000 trees on background threads.
+[2026-04-10T12:05:50.5321513Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-10T12:05:52.4250853Z] [Info] [Thread 1] Fullscreen toggled. Enabled: True.
+[2026-04-10T12:05:54.8456667Z] [Info] [Thread 1] View mode toggled. Plan view enabled: False.
+[2026-04-10T12:07:31.9915135Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 76545816 with 24000 trees on background threads.
+[2026-04-10T12:07:33.7214120Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 76545816.
+[2026-04-10T12:07:53.7961469Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 1056447000 with 24000 trees on background threads.
+[2026-04-10T12:07:55.6916142Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 1056447000.
+[2026-04-10T12:08:15.4628378Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 289249783 with 24000 trees on background threads.
+[2026-04-10T12:08:17.1440314Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 289249783.
+[2026-04-10T12:08:23.3711992Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 1816198391 with 24000 trees on background threads.
+[2026-04-10T12:08:24.9978428Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 1816198391.
+[2026-04-10T12:09:04.4537527Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 1952394961 with 24000 trees on background threads.
+[2026-04-10T12:09:06.2869082Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 1952394961.
+[2026-04-10T12:09:08.8846079Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 399952286 with 24000 trees on background threads.
+[2026-04-10T12:09:10.4839949Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 399952286.
+[2026-04-10T12:09:13.8191477Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 1458702885 with 24000 trees on background threads.
+[2026-04-10T12:09:15.4688491Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 1458702885.
+[2026-04-10T12:09:17.5682845Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 396871404 with 24000 trees on background threads.
+[2026-04-10T12:09:19.2301881Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 396871404.
+[2026-04-10T12:11:17.8163366Z] [Info] [Thread 1] View mode toggled. Plan view enabled: True.
+[2026-04-10T12:11:22.3257533Z] [Info] [Thread 1] View mode toggled. Plan view enabled: False.
+[2026-04-10T12:11:36.8295765Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 1337574251 with 24000 trees on background threads.
+[2026-04-10T12:11:38.6939032Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 1337574251.
+[2026-04-10T12:11:42.0236703Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 1250697702 with 24000 trees on background threads.
+[2026-04-10T12:11:43.5772921Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 1250697702.
+[2026-04-10T12:17:01.3098405Z] [Info] [Thread 1] Exit requested by player input.
+[2026-04-10T12:17:01.3103569Z] [Debug] [Thread 1] Unloading game content.
+[2026-04-10T12:17:01.3109393Z] [Info] [Thread 1] Game runtime stopped normally.
+[2026-04-10T12:17:02.1713798Z] [Info] [Thread 1] Shutting down debug logging.

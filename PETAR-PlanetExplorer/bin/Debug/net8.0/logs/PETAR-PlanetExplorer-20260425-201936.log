@@ -1,0 +1,23 @@
+[2026-04-25T20:19:36.3071880Z] [Info] [Thread 1] Debug logging initialized. Writing to 'D:\NewProjects\Games\PETAR-PlanetExplorer\PETAR-PlanetExplorer\bin\Debug\net8.0\logs\PETAR-PlanetExplorer-20260425-201936.log'.
+[2026-04-25T20:19:36.3088131Z] [Info] [Thread 1] Starting game runtime.
+[2026-04-25T20:19:36.7688101Z] [Debug] [Thread 1] PETARPlanetExplorer instance created.
+[2026-04-25T20:19:37.1107110Z] [Debug] [Thread 1] Initializing game systems.
+[2026-04-25T20:19:37.2161861Z] [Debug] [Thread 1] Game content loaded.
+[2026-04-25T20:19:37.2162325Z] [Info] [Thread 1] Loaded font resource 'Fonts/SpaceFont'.
+[2026-04-25T20:19:37.2215945Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291, theme Earth, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T20:19:40.7110794Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-25T20:19:51.8956015Z] [Info] [Thread 1] Fullscreen toggled. Enabled: True.
+[2026-04-25T20:19:54.5709179Z] [Info] [Thread 1] View mode toggled. Plan view enabled: False.
+[2026-04-25T20:20:24.5534908Z] [Info] [Thread 1] Custom generation settings updated. Theme: Earth, mountains: 0.55, volcanoes: 0.20, craters: 0.35, gorges: 0.25.
+[2026-04-25T20:20:24.5589119Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291, theme Earth, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T20:20:27.8543564Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-25T20:22:03.2536120Z] [Info] [Thread 1] Custom generation settings updated. Theme: Thalor, mountains: 0.55, volcanoes: 0.20, craters: 0.35, gorges: 0.25.
+[2026-04-25T20:22:03.2544431Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291, theme Thalor, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T20:22:06.4048436Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-25T20:25:23.9706829Z] [Info] [Thread 1] Custom generation settings updated. Theme: Thalor, mountains: 0.00, volcanoes: 0.20, craters: 0.35, gorges: 0.25.
+[2026-04-25T20:25:23.9711047Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291, theme Thalor, mountains 0.00, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T20:25:27.3583824Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-25T20:25:40.6206860Z] [Info] [Thread 1] Exit requested by player input.
+[2026-04-25T20:25:40.6210798Z] [Debug] [Thread 1] Unloading game content.
+[2026-04-25T20:25:40.6214589Z] [Info] [Thread 1] Game runtime stopped normally.
+[2026-04-25T20:25:41.4531277Z] [Info] [Thread 1] Shutting down debug logging.

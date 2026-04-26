@@ -1,0 +1,39 @@
+[2026-04-25T21:28:14.6957824Z] [Info] [Thread 1] Debug logging initialized. Writing to 'D:\NewProjects\Games\PETAR-PlanetExplorer\PETAR-PlanetExplorer\bin\Debug\net8.0\logs\PETAR-PlanetExplorer-20260425-212814.log'.
+[2026-04-25T21:28:14.6969823Z] [Info] [Thread 1] Starting game runtime.
+[2026-04-25T21:28:15.1328622Z] [Debug] [Thread 1] PETARPlanetExplorer instance created.
+[2026-04-25T21:28:15.4579902Z] [Debug] [Thread 1] Initializing game systems.
+[2026-04-25T21:28:15.5503306Z] [Debug] [Thread 1] Game content loaded.
+[2026-04-25T21:28:15.5503883Z] [Info] [Thread 1] Loaded font resource 'Fonts/SpaceFont'.
+[2026-04-25T21:28:15.5545845Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291, theme Earth, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T21:28:19.0477404Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-25T21:28:21.4347706Z] [Info] [Thread 1] Fullscreen toggled. Enabled: True.
+[2026-04-25T21:28:24.0674047Z] [Info] [Thread 1] View mode toggled. Plan view enabled: False.
+[2026-04-25T21:28:34.1646500Z] [Info] [Thread 1] Custom generation settings updated. Theme: Mercury, mountains: 0.55, volcanoes: 0.20, craters: 0.35, gorges: 0.25.
+[2026-04-25T21:28:34.1666063Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291, theme Mercury, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T21:28:37.2655602Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-25T21:28:50.9978867Z] [Info] [Thread 1] Custom generation settings updated. Theme: Galvion, mountains: 0.55, volcanoes: 0.20, craters: 0.35, gorges: 0.25.
+[2026-04-25T21:28:50.9982749Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291, theme Galvion, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T21:28:54.0657215Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-25T21:29:09.5479881Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 793052610, theme Galvion, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T21:29:12.7164492Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 793052610.
+[2026-04-25T21:29:14.6646344Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 829029857, theme Galvion, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T21:29:17.8000258Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 829029857.
+[2026-04-25T21:29:24.7979442Z] [Info] [Thread 1] Custom generation settings updated. Theme: Heliora, mountains: 0.55, volcanoes: 0.20, craters: 0.35, gorges: 0.25.
+[2026-04-25T21:29:24.7980693Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 829029857, theme Heliora, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T21:29:27.9832749Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 829029857.
+[2026-04-25T21:29:35.6479629Z] [Info] [Thread 1] Custom generation settings updated. Theme: Orinth, mountains: 0.55, volcanoes: 0.20, craters: 0.35, gorges: 0.25.
+[2026-04-25T21:29:35.6480554Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 829029857, theme Orinth, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T21:29:38.9673891Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 829029857.
+[2026-04-25T21:29:46.0646728Z] [Info] [Thread 1] Custom generation settings updated. Theme: Ydris, mountains: 0.55, volcanoes: 0.20, craters: 0.35, gorges: 0.25.
+[2026-04-25T21:29:46.0647799Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 829029857, theme Ydris, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T21:29:49.1843756Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 829029857.
+[2026-04-25T21:30:01.6813446Z] [Info] [Thread 1] Custom generation settings updated. Theme: Ydris, mountains: 0.55, volcanoes: 0.20, craters: 0.35, gorges: 0.25.
+[2026-04-25T21:30:01.6814934Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 829029857, theme Ydris, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T21:30:04.7844332Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 829029857.
+[2026-04-25T21:30:47.7481014Z] [Info] [Thread 1] Custom generation settings updated. Theme: Ydris, mountains: 0.55, volcanoes: 0.20, craters: 0.35, gorges: 0.25.
+[2026-04-25T21:30:47.7485662Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 829029857, theme Ydris, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T21:30:51.1686317Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 829029857.
+[2026-04-25T21:33:01.7316907Z] [Info] [Thread 1] Exit requested by player input.
+[2026-04-25T21:33:01.7322542Z] [Debug] [Thread 1] Unloading game content.
+[2026-04-25T21:33:01.7326402Z] [Info] [Thread 1] Game runtime stopped normally.
+[2026-04-25T21:33:02.4750602Z] [Info] [Thread 1] Shutting down debug logging.

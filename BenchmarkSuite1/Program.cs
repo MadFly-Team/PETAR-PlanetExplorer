@@ -1,5 +1,4 @@
 using BenchmarkDotNet.Running;
-using PEPAR.Benchmarks;
 
 namespace BenchmarkSuite1
 {
@@ -7,7 +6,7 @@ namespace BenchmarkSuite1
     {
         static void Main(string[] args)
         {
-            BenchmarkSwitcher.FromAssembly(typeof(WormsTerrainDrawerBenchmarks).Assembly).Run(args);
+            BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
         }
     }
 }

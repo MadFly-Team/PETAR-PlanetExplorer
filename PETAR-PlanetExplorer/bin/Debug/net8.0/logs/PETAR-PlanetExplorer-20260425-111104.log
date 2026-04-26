@@ -1,0 +1,19 @@
+[2026-04-25T11:11:05.0046772Z] [Info] [Thread 1] Debug logging initialized. Writing to 'D:\NewProjects\Games\PETAR-PlanetExplorer\PETAR-PlanetExplorer\bin\Debug\net8.0\logs\PETAR-PlanetExplorer-20260425-111104.log'.
+[2026-04-25T11:11:05.0062035Z] [Info] [Thread 1] Starting game runtime.
+[2026-04-25T11:11:05.3821370Z] [Debug] [Thread 1] PETARPlanetExplorer instance created.
+[2026-04-25T11:11:05.7188785Z] [Debug] [Thread 1] Initializing game systems.
+[2026-04-25T11:11:05.8126735Z] [Debug] [Thread 1] Game content loaded.
+[2026-04-25T11:11:05.8127312Z] [Info] [Thread 1] Loaded font resource 'Fonts/SpaceFont'.
+[2026-04-25T11:11:05.8174894Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291, theme Earth, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T11:11:08.9958356Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-25T11:11:10.7936350Z] [Info] [Thread 1] View mode toggled. Plan view enabled: False.
+[2026-04-25T11:11:15.2249659Z] [Info] [Thread 1] Fullscreen toggled. Enabled: True.
+[2026-04-25T11:11:22.7486797Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 2108772158, theme Earth, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T11:11:25.5573634Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 2108772158.
+[2026-04-25T11:12:07.0635632Z] [Info] [Thread 1] Custom generation settings updated. Theme: Earth, mountains: 0.55, volcanoes: 0.20, craters: 0.35, gorges: 0.25.
+[2026-04-25T11:12:07.0645260Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 2108772158, theme Earth, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-25T11:12:10.0750584Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 2108772158.
+[2026-04-25T11:12:50.9468871Z] [Info] [Thread 1] Exit requested by player input.
+[2026-04-25T11:12:50.9473520Z] [Debug] [Thread 1] Unloading game content.
+[2026-04-25T11:12:50.9477625Z] [Info] [Thread 1] Game runtime stopped normally.
+[2026-04-25T11:12:51.6725213Z] [Info] [Thread 1] Shutting down debug logging.

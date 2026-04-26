@@ -1,0 +1,16 @@
+[2026-04-26T21:43:56.8759933Z] [Info] [Thread 1] Debug logging initialized. Writing to 'D:\NewProjects\Games\PETAR-PlanetExplorer\PETAR-PlanetExplorer\bin\Debug\net8.0\logs\PETAR-PlanetExplorer-20260426-214356.log'.
+[2026-04-26T21:43:56.8778180Z] [Info] [Thread 1] Starting game runtime.
+[2026-04-26T21:43:57.2764546Z] [Debug] [Thread 1] PETARPlanetExplorer instance created.
+[2026-04-26T21:43:57.6197740Z] [Debug] [Thread 1] Initializing game systems.
+[2026-04-26T21:43:57.7126275Z] [Debug] [Thread 1] Game content loaded.
+[2026-04-26T21:43:57.7127482Z] [Info] [Thread 1] Loaded font resource 'Fonts/SpaceFont'.
+[2026-04-26T21:43:57.7414659Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291, theme Earth, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-26T21:44:01.3035268Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-26T21:44:03.1329183Z] [Info] [Thread 1] View mode toggled. Plan view enabled: False.
+[2026-04-26T21:46:37.2493009Z] [Info] [Thread 1] Custom generation settings updated. Theme: Earth, mountains: 0.55, volcanoes: 0.20, craters: 0.35, gorges: 0.25.
+[2026-04-26T21:46:37.2493876Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291, theme Earth, mountains 0.55, volcanoes 0.20, craters 0.35, gorges 0.25.
+[2026-04-26T21:46:40.4188993Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-26T21:51:59.3498299Z] [Info] [Thread 1] Exit requested by player input.
+[2026-04-26T21:51:59.3503427Z] [Debug] [Thread 1] Unloading game content.
+[2026-04-26T21:51:59.3507313Z] [Info] [Thread 1] Game runtime stopped normally.
+[2026-04-26T21:51:59.4328402Z] [Info] [Thread 1] Shutting down debug logging.

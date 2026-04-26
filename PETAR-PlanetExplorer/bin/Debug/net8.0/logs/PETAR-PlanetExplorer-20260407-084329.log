@@ -1,0 +1,16 @@
+[2026-04-07T08:43:29.9816865Z] [Info] [Thread 1] Debug logging initialized. Writing to 'D:\NewProjects\Games\PETAR-PlanetExplorer\PETAR-PlanetExplorer\bin\Debug\net8.0\logs\PETAR-PlanetExplorer-20260407-084329.log'.
+[2026-04-07T08:43:29.9829033Z] [Info] [Thread 1] Starting game runtime.
+[2026-04-07T08:43:30.4091849Z] [Debug] [Thread 1] PETARPlanetExplorer instance created.
+[2026-04-07T08:43:30.8237923Z] [Debug] [Thread 1] Initializing game systems.
+[2026-04-07T08:43:30.9113618Z] [Debug] [Thread 1] Game content loaded.
+[2026-04-07T08:43:30.9114129Z] [Info] [Thread 1] Loaded font resource 'Fonts/SpaceFont'.
+[2026-04-07T08:43:30.9126041Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 74291 on background threads.
+[2026-04-07T08:43:32.8520447Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 74291.
+[2026-04-07T08:43:35.3579698Z] [Info] [Thread 1] Fullscreen toggled. Enabled: True.
+[2026-04-07T08:43:39.0930703Z] [Info] [Thread 1] View mode toggled. Plan view enabled: False.
+[2026-04-07T08:46:29.8541280Z] [Info] [Thread 1] Started procedural world generation 4096x4096 using seed 9589895 on background threads.
+[2026-04-07T08:46:31.7033905Z] [Info] [Thread 1] Generated procedural world map 4096x4096 using seed 9589895.
+[2026-04-07T08:48:17.0760923Z] [Info] [Thread 1] Exit requested by player input.
+[2026-04-07T08:48:17.0764943Z] [Debug] [Thread 1] Unloading game content.
+[2026-04-07T08:48:17.0768607Z] [Info] [Thread 1] Game runtime stopped normally.
+[2026-04-07T08:48:17.9923949Z] [Info] [Thread 1] Shutting down debug logging.
