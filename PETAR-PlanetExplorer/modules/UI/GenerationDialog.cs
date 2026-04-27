@@ -13,7 +13,9 @@ namespace PETAR_PlanetExplorer.Modules.UI
         private const int SliderLeft = 200;
         private const int SliderWidth = 250;
         private readonly SliderField[] _sliderFields;
-        private readonly OptionField _themeField;
+        private readonly OptionField<int> _terrainSlotField;
+        private readonly OptionField<PlanetTheme> _themeField;
+        private string[] _terrainSlotLabels;
         private MouseState _previousMouseState;
         private string _seedText;
         private int _selectedIndex;
@@ -21,13 +23,16 @@ namespace PETAR_PlanetExplorer.Modules.UI
         private Rectangle _loadButtonBounds;
         private Rectangle _generateButtonBounds;
         private Rectangle _cancelButtonBounds;
+        private Rectangle _terrainSlotTrackBounds;
         private Rectangle _themeTrackBounds;
         private readonly Rectangle[] _sliderTrackBounds;
 
-        public GenerationDialog(WorldGenerationSettings settings)
+        public GenerationDialog(WorldGenerationSettings settings, int activeTerrainSlot = 0, int terrainSlotCount = 1, string[] terrainSlotLabels = null)
         {
             Settings = settings ?? WorldGenerationSettings.Default;
-            _themeField = new OptionField("Theme", PlanetTheme.All, Settings.Theme);
+            _terrainSlotField = new OptionField<int>("Terrain Slot", CreateTerrainSlotOptions(terrainSlotCount), Math.Clamp(activeTerrainSlot, 0, Math.Max(0, terrainSlotCount - 1)));
+            _themeField = new OptionField<PlanetTheme>("Theme", PlanetTheme.All, Settings.Theme);
+            _terrainSlotLabels = NormalizeTerrainSlotLabels(terrainSlotCount, terrainSlotLabels);
             _sliderFields =
             [
                 new SliderField("Mountains", Settings.MountainIntensity),
@@ -39,15 +44,28 @@ namespace PETAR_PlanetExplorer.Modules.UI
             ];
             _sliderTrackBounds = new Rectangle[_sliderFields.Length];
             _seedText = Settings.Seed.ToString();
+            SelectedTerrainEditSlot = _terrainSlotField.SelectedOption;
         }
 
         public WorldGenerationSettings Settings { get; private set; }
+
+        public int SelectedTerrainEditSlot { get; private set; }
+
+        public string[] TerrainSlotLabels => (string[])_terrainSlotLabels.Clone();
 
         public bool IsOpen { get; private set; }
 
         public void Open(WorldGenerationSettings settings)
         {
+            Open(settings, SelectedTerrainEditSlot, Math.Max(1, _terrainSlotField.Options.Length), _terrainSlotLabels);
+        }
+
+        public void Open(WorldGenerationSettings settings, int activeTerrainSlot, int terrainSlotCount, string[] terrainSlotLabels = null)
+        {
             Settings = settings ?? WorldGenerationSettings.Default;
+            _terrainSlotField.Options = CreateTerrainSlotOptions(terrainSlotCount);
+            _terrainSlotField.SelectedOption = Math.Clamp(activeTerrainSlot, 0, _terrainSlotField.Options.Length - 1);
+            _terrainSlotLabels = NormalizeTerrainSlotLabels(terrainSlotCount, terrainSlotLabels ?? _terrainSlotLabels);
             _themeField.SelectedOption = Settings.Theme;
             _sliderFields[0].Value = Settings.MountainIntensity;
             _sliderFields[1].Value = Settings.PlateauIntensity;
@@ -57,6 +75,7 @@ namespace PETAR_PlanetExplorer.Modules.UI
             _sliderFields[5].Value = GetMaxColumnSliderValue(Settings.MaxCubeColumn);
             _seedText = Settings.Seed.ToString();
             _selectedIndex = 0;
+            SelectedTerrainEditSlot = _terrainSlotField.SelectedOption;
             IsOpen = true;
         }
 
@@ -109,6 +128,7 @@ namespace PETAR_PlanetExplorer.Modules.UI
             }
 
             HandleSeedTyping(current, previous);
+            HandleTerrainSlotLabelTyping(current, previous);
 
             ApplySettings();
             _previousMouseState = mouseState;
@@ -123,7 +143,7 @@ namespace PETAR_PlanetExplorer.Modules.UI
             }
 
             var dialogWidth = 600;
-            var dialogHeight = 520;
+            var dialogHeight = 560;
             var dialogBounds = new Rectangle(
                 (viewport.Width - dialogWidth) / 2,
                 (viewport.Height - dialogHeight) / 2,
@@ -145,17 +165,18 @@ namespace PETAR_PlanetExplorer.Modules.UI
             spriteBatch.DrawString(font, "Custom World Generation", new Vector2(contentX, contentY), Color.White, 0f, Vector2.Zero, FontScale, SpriteEffects.None, 0f);
 
             DrawSeedField(spriteBatch, font, pixel, contentX, contentY + 54, labelColor, selectedColor, sliderTrackColor);
-            DrawThemeField(spriteBatch, font, pixel, contentX, contentY + 54 + rowHeight, labelColor, selectedColor, sliderTrackColor, sliderFillColor);
+            DrawTerrainSlotField(spriteBatch, font, pixel, contentX, contentY + 54 + rowHeight, labelColor, selectedColor, sliderTrackColor, sliderFillColor);
+            DrawThemeField(spriteBatch, font, pixel, contentX, contentY + 54 + (rowHeight * 2), labelColor, selectedColor, sliderTrackColor, sliderFillColor);
             for (var index = 0; index < _sliderFields.Length; index++)
             {
-                DrawSliderField(spriteBatch, font, pixel, contentX, contentY + 54 + ((index + 2) * rowHeight), _sliderFields[index], index + 2, labelColor, selectedColor, sliderTrackColor, sliderFillColor);
+                DrawSliderField(spriteBatch, font, pixel, contentX, contentY + 54 + ((index + 3) * rowHeight), _sliderFields[index], index + 3, labelColor, selectedColor, sliderTrackColor, sliderFillColor);
             }
 
             DrawActionButtons(spriteBatch, font, pixel, dialogBounds, contentY, rowHeight, labelColor, selectedColor);
-            spriteBatch.DrawString(font, "Up/Down select  Left/Right adjust  Mouse drag sliders  Enter generate  Esc cancel", new Vector2(contentX, dialogBounds.Bottom - 34), new Color(190, 202, 214), 0f, Vector2.Zero, FontScale, SpriteEffects.None, 0f);
+            spriteBatch.DrawString(font, "Up/Down select  Left/Right adjust  Type to rename selected slot  Enter generate  Esc cancel", new Vector2(contentX, dialogBounds.Bottom - 34), new Color(190, 202, 214), 0f, Vector2.Zero, FontScale, SpriteEffects.None, 0f);
         }
 
-        private int FieldCount => _sliderFields.Length + 2;
+        private int FieldCount => _sliderFields.Length + 3;
 
         private void AdjustSelectedField(int direction)
         {
@@ -166,11 +187,18 @@ namespace PETAR_PlanetExplorer.Modules.UI
 
             if (_selectedIndex == 1)
             {
+                _terrainSlotField.Adjust(direction);
+                SelectedTerrainEditSlot = _terrainSlotField.SelectedOption;
+                return;
+            }
+
+            if (_selectedIndex == 2)
+            {
                 _themeField.Adjust(direction);
                 return;
             }
 
-            var slider = _sliderFields[_selectedIndex - 2];
+            var slider = _sliderFields[_selectedIndex - 3];
             slider.Value = Math.Clamp(slider.Value + (direction / (float)SliderStepCount), 0f, 1f);
         }
 
@@ -224,13 +252,28 @@ namespace PETAR_PlanetExplorer.Modules.UI
                 return DialogResult.Cancelled;
             }
 
-            if (UpdateThemeFromMouse(mouseState))
+            if (UpdateTerrainSlotFromMouse(mouseState) || UpdateThemeFromMouse(mouseState))
             {
                 return DialogResult.None;
             }
 
             UpdateSliderFromMouse(mouseState);
             return DialogResult.None;
+        }
+
+        private bool UpdateTerrainSlotFromMouse(MouseState mouseState)
+        {
+            if (!_terrainSlotTrackBounds.Contains(mouseState.Position) || _terrainSlotField.Options.Length == 0)
+            {
+                return false;
+            }
+
+            _selectedIndex = 1;
+            var relativeX = Math.Clamp(mouseState.X - _terrainSlotTrackBounds.X, 0, Math.Max(0, _terrainSlotTrackBounds.Width - 1));
+            var slotIndex = Math.Clamp((int)((relativeX / (float)Math.Max(1, _terrainSlotTrackBounds.Width)) * _terrainSlotField.Options.Length), 0, _terrainSlotField.Options.Length - 1);
+            _terrainSlotField.SelectedOption = _terrainSlotField.Options[slotIndex];
+            SelectedTerrainEditSlot = _terrainSlotField.SelectedOption;
+            return true;
         }
 
         private bool UpdateThemeFromMouse(MouseState mouseState)
@@ -240,7 +283,7 @@ namespace PETAR_PlanetExplorer.Modules.UI
                 return false;
             }
 
-            _selectedIndex = 1;
+            _selectedIndex = 2;
             var relativeX = Math.Clamp(mouseState.X - _themeTrackBounds.X, 0, Math.Max(0, _themeTrackBounds.Width - 1));
             var themeIndex = Math.Clamp((int)((relativeX / (float)Math.Max(1, _themeTrackBounds.Width)) * PlanetTheme.All.Length), 0, PlanetTheme.All.Length - 1);
             _themeField.SelectedOption = PlanetTheme.All[themeIndex];
@@ -257,7 +300,7 @@ namespace PETAR_PlanetExplorer.Modules.UI
                     continue;
                 }
 
-                _selectedIndex = index + 2;
+                _selectedIndex = index + 3;
                 _sliderFields[index].Value = Math.Clamp((mouseState.X - track.X) / (float)track.Width, 0f, 1f);
                 return;
             }
@@ -297,6 +340,86 @@ namespace PETAR_PlanetExplorer.Modules.UI
             }
         }
 
+        private void HandleTerrainSlotLabelTyping(KeyboardState current, KeyboardState previous)
+        {
+            if (_selectedIndex != 1 || _terrainSlotLabels.Length == 0)
+            {
+                return;
+            }
+
+            var slotIndex = Math.Clamp(_terrainSlotField.SelectedOption, 0, _terrainSlotLabels.Length - 1);
+            var label = _terrainSlotLabels[slotIndex] ?? string.Empty;
+            foreach (var key in current.GetPressedKeys())
+            {
+                if (previous.IsKeyDown(key))
+                {
+                    continue;
+                }
+
+                if (key == Keys.Back)
+                {
+                    if (label.Length > 0)
+                    {
+                        label = label[..^1];
+                    }
+
+                    continue;
+                }
+
+                if (key == Keys.Space)
+                {
+                    if (label.Length < 18)
+                    {
+                        label += " ";
+                    }
+
+                    continue;
+                }
+
+                if (key is >= Keys.A and <= Keys.Z)
+                {
+                    if (label.Length < 18)
+                    {
+                        label += (char)('A' + (key - Keys.A));
+                    }
+
+                    continue;
+                }
+
+                if (key is >= Keys.D0 and <= Keys.D9)
+                {
+                    if (label.Length < 18)
+                    {
+                        label += (char)('0' + (key - Keys.D0));
+                    }
+
+                    continue;
+                }
+
+                if (key is >= Keys.NumPad0 and <= Keys.NumPad9)
+                {
+                    if (label.Length < 18)
+                    {
+                        label += (char)('0' + (key - Keys.NumPad0));
+                    }
+
+                    continue;
+                }
+
+                if (key == Keys.OemMinus || key == Keys.Subtract)
+                {
+                    if (label.Length < 18)
+                    {
+                        label += "-";
+                    }
+                }
+            }
+
+            _terrainSlotLabels[slotIndex] = string.IsNullOrWhiteSpace(label)
+                ? $"Slot {slotIndex + 1}"
+                : label.Trim();
+        }
+
         private int ParseSeed()
         {
             return int.TryParse(_seedText, out var seed)
@@ -315,9 +438,26 @@ namespace PETAR_PlanetExplorer.Modules.UI
             spriteBatch.DrawString(font, _seedText, new Vector2(fieldBounds.X + 6, y), Color.White, 0f, Vector2.Zero, FontScale, SpriteEffects.None, 0f);
         }
 
-        private void DrawThemeField(SpriteBatch spriteBatch, SpriteFont font, Texture2D pixel, int x, int y, Color labelColor, Color selectedColor, Color trackColor, Color fillColor)
+        private void DrawTerrainSlotField(SpriteBatch spriteBatch, SpriteFont font, Texture2D pixel, int x, int y, Color labelColor, Color selectedColor, Color trackColor, Color fillColor)
         {
             var isSelected = _selectedIndex == 1;
+            var color = isSelected ? selectedColor : labelColor;
+            spriteBatch.DrawString(font, _terrainSlotField.Label, new Vector2(x, y), color, 0f, Vector2.Zero, FontScale, SpriteEffects.None, 0f);
+            var slotIndex = Math.Clamp(_terrainSlotField.SelectedOption, 0, _terrainSlotLabels.Length - 1);
+            var slotLabel = _terrainSlotLabels.Length > 0 ? _terrainSlotLabels[slotIndex] : $"Slot {_terrainSlotField.SelectedOption + 1}";
+            spriteBatch.DrawString(font, $"Slot {_terrainSlotField.SelectedOption + 1}: {slotLabel}", new Vector2(x + SliderLeft, y), color, 0f, Vector2.Zero, FontScale, SpriteEffects.None, 0f);
+
+            var track = new Rectangle(x + SliderLeft, y + 20, SliderWidth, 8);
+            _terrainSlotTrackBounds = track;
+            spriteBatch.Draw(pixel, track, trackColor);
+            slotIndex = Array.IndexOf(_terrainSlotField.Options, _terrainSlotField.SelectedOption);
+            var fillWidth = (int)MathF.Round(((slotIndex + 1) / (float)_terrainSlotField.Options.Length) * track.Width);
+            spriteBatch.Draw(pixel, new Rectangle(track.X, track.Y, Math.Max(8, fillWidth), track.Height), fillColor);
+        }
+
+        private void DrawThemeField(SpriteBatch spriteBatch, SpriteFont font, Texture2D pixel, int x, int y, Color labelColor, Color selectedColor, Color trackColor, Color fillColor)
+        {
+            var isSelected = _selectedIndex == 2;
             var color = isSelected ? selectedColor : labelColor;
             spriteBatch.DrawString(font, _themeField.Label, new Vector2(x, y), color, 0f, Vector2.Zero, FontScale, SpriteEffects.None, 0f);
             spriteBatch.DrawString(font, _themeField.SelectedOption.DisplayName, new Vector2(x + SliderLeft, y), color, 0f, Vector2.Zero, FontScale, SpriteEffects.None, 0f);
@@ -338,7 +478,7 @@ namespace PETAR_PlanetExplorer.Modules.UI
             spriteBatch.DrawString(font, $"{field.Value:0.00}", new Vector2(x + SliderLeft, y), color, 0f, Vector2.Zero, FontScale, SpriteEffects.None, 0f);
 
             var track = new Rectangle(x + SliderLeft, y + 20, SliderWidth, 8);
-            _sliderTrackBounds[visualIndex - 2] = track;
+            _sliderTrackBounds[visualIndex - 3] = track;
             spriteBatch.Draw(pixel, track, trackColor);
             var fillWidth = (int)MathF.Round(field.Value * track.Width);
             spriteBatch.Draw(pixel, new Rectangle(track.X, track.Y, Math.Max(6, fillWidth), track.Height), fillColor);
@@ -397,6 +537,32 @@ namespace PETAR_PlanetExplorer.Modules.UI
             return current.IsKeyDown(key) && !previous.IsKeyDown(key);
         }
 
+        private static int[] CreateTerrainSlotOptions(int terrainSlotCount)
+        {
+            terrainSlotCount = Math.Max(1, terrainSlotCount);
+            var options = new int[terrainSlotCount];
+            for (var index = 0; index < terrainSlotCount; index++)
+            {
+                options[index] = index;
+            }
+
+            return options;
+        }
+
+        private static string[] NormalizeTerrainSlotLabels(int terrainSlotCount, string[] terrainSlotLabels)
+        {
+            terrainSlotCount = Math.Max(1, terrainSlotCount);
+            var labels = new string[terrainSlotCount];
+            for (var index = 0; index < terrainSlotCount; index++)
+            {
+                labels[index] = terrainSlotLabels != null && index < terrainSlotLabels.Length && !string.IsNullOrWhiteSpace(terrainSlotLabels[index])
+                    ? terrainSlotLabels[index].Trim()
+                    : $"Slot {index + 1}";
+            }
+
+            return labels;
+        }
+
         public enum DialogResult
         {
             None,
@@ -406,9 +572,9 @@ namespace PETAR_PlanetExplorer.Modules.UI
             LoadPreset
         }
 
-        private sealed class OptionField
+        private sealed class OptionField<T>
         {
-            public OptionField(string label, PlanetTheme[] options, PlanetTheme selectedOption)
+            public OptionField(string label, T[] options, T selectedOption)
             {
                 Label = label;
                 Options = options;
@@ -417,9 +583,9 @@ namespace PETAR_PlanetExplorer.Modules.UI
 
             public string Label { get; }
 
-            public PlanetTheme[] Options { get; }
+            public T[] Options { get; set; }
 
-            public PlanetTheme SelectedOption { get; set; }
+            public T SelectedOption { get; set; }
 
             public void Adjust(int direction)
             {

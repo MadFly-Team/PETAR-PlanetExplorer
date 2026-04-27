@@ -16,7 +16,13 @@ namespace PETAR_PlanetExplorer.Modules.Maps
 
         public bool TryLoad(out WorldGenerationSettings settings)
         {
+            return TryLoad(out settings, out _);
+        }
+
+        public bool TryLoad(out WorldGenerationSettings settings, out int terrainEditSlot)
+        {
             settings = WorldGenerationSettings.Default;
+            terrainEditSlot = 0;
             if (!File.Exists(_presetFilePath))
             {
                 return false;
@@ -41,6 +47,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                     preset.GorgeIntensity,
                     preset.MaxCubeColumn,
                     preset.TreeCount);
+                terrainEditSlot = Math.Max(0, preset.TerrainEditSlot);
                 return true;
             }
             catch
@@ -50,6 +57,11 @@ namespace PETAR_PlanetExplorer.Modules.Maps
         }
 
         public void Save(WorldGenerationSettings settings)
+        {
+            Save(settings, 0);
+        }
+
+        public void Save(WorldGenerationSettings settings, int terrainEditSlot)
         {
             ArgumentNullException.ThrowIfNull(settings);
             var directory = Path.GetDirectoryName(_presetFilePath);
@@ -68,7 +80,8 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                 CraterIntensity = settings.CraterIntensity,
                 GorgeIntensity = settings.GorgeIntensity,
                 MaxCubeColumn = settings.MaxCubeColumn,
-                TreeCount = settings.TreeCount
+                TreeCount = settings.TreeCount,
+                TerrainEditSlot = Math.Max(0, terrainEditSlot)
             };
             var json = JsonSerializer.Serialize(preset, _jsonOptions);
             File.WriteAllText(_presetFilePath, json);
@@ -93,6 +106,8 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             public int MaxCubeColumn { get; set; }
 
             public int TreeCount { get; set; }
+
+            public int TerrainEditSlot { get; set; }
         }
     }
 }
