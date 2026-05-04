@@ -5,11 +5,12 @@ namespace PETAR_PlanetExplorer.Modules.Maps
 {
     public sealed class PlanetTheme
     {
-        private PlanetTheme(string key, string displayName, bool supportsLife, TerrainColorBand[] terrainBands, Color riverLowColor, Color riverHighColor, Color waterLowColor, Color waterHighColor)
+        private PlanetTheme(string key, string displayName, bool supportsLife, bool hasSurfaceWater, TerrainColorBand[] terrainBands, Color riverLowColor, Color riverHighColor, Color waterLowColor, Color waterHighColor)
         {
             Key = key;
             DisplayName = displayName;
             SupportsLife = supportsLife;
+            HasSurfaceWater = hasSurfaceWater;
             TerrainBands = terrainBands;
             RiverLowColor = riverLowColor;
             RiverHighColor = riverHighColor;
@@ -23,7 +24,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
 
         public bool SupportsLife { get; }
 
-        public bool HasSurfaceWater => SupportsLife;
+        public bool HasSurfaceWater { get; }
 
         public bool HasTrees => SupportsLife;
 
@@ -43,6 +44,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             "earth",
             "Earth",
             supportsLife: true,
+            hasSurfaceWater: true,
             terrainBands:
             [
                 new TerrainColorBand(0f, ProceduralWorldMap.SeaLevel * 0.24f, new Color(2, 6, 26), new Color(6, 18, 58)),
@@ -67,6 +69,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             "mercury",
             "Mercury",
             supportsLife: false,
+            hasSurfaceWater: false,
             terrainBands:
             [
                 new TerrainColorBand(0f, 0.12f, new Color(18, 18, 24), new Color(34, 34, 42)),
@@ -78,13 +81,14 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             ],
             riverLowColor: Color.Transparent,
             riverHighColor: Color.Transparent,
-            waterLowColor: Color.Transparent,
-            waterHighColor: Color.Transparent);
+            waterLowColor: new Color(8, 58, 22, 196),
+            waterHighColor: new Color(36, 126, 54, 164));
 
         public static PlanetTheme Venus { get; } = new PlanetTheme(
             "venus",
             "Venus",
             supportsLife: false,
+            hasSurfaceWater: true,
             terrainBands:
             [
                 new TerrainColorBand(0f, 0.16f, new Color(52, 28, 18), new Color(82, 46, 26)),
@@ -103,6 +107,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             "mars",
             "Mars",
             supportsLife: false,
+            hasSurfaceWater: false,
             terrainBands:
             [
                 new TerrainColorBand(0f, 0.14f, new Color(42, 18, 16), new Color(68, 24, 20)),
@@ -121,6 +126,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             "moon",
             "Moon",
             supportsLife: false,
+            hasSurfaceWater: false,
             terrainBands:
             [
                 new TerrainColorBand(0f, 0.12f, new Color(18, 18, 20), new Color(32, 32, 36)),
@@ -246,10 +252,25 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             var peakPrimary = LerpColor(primaryColor, Color.White, 0.62f);
             var peakAccent = LerpColor(accentColor, Color.White, 0.62f);
 
+            var waterHueBucket = (int)(GetNormalizedSeed(seed, 6) * 3f) % 3;
+            var waterLowColor = waterHueBucket switch
+            {
+                0 => new Color(186, 20 + (byte)(GetNormalizedSeed(seed, 7) * 32f), 20 + (byte)(GetNormalizedSeed(seed, 8) * 28f), 188),
+                1 => new Color(20 + (byte)(GetNormalizedSeed(seed, 7) * 28f), 184, 18 + (byte)(GetNormalizedSeed(seed, 8) * 32f), 188),
+                _ => new Color(22 + (byte)(GetNormalizedSeed(seed, 7) * 30f), 26 + (byte)(GetNormalizedSeed(seed, 8) * 28f), 198, 188)
+            };
+            var waterHighColor = waterHueBucket switch
+            {
+                0 => new Color(255, 74 + (byte)(GetNormalizedSeed(seed, 9) * 54f), 62 + (byte)(GetNormalizedSeed(seed, 10) * 44f), 156),
+                1 => new Color(72 + (byte)(GetNormalizedSeed(seed, 9) * 40f), 255, 72 + (byte)(GetNormalizedSeed(seed, 10) * 48f), 156),
+                _ => new Color(78 + (byte)(GetNormalizedSeed(seed, 9) * 42f), 96 + (byte)(GetNormalizedSeed(seed, 10) * 38f), 255, 156)
+            };
+
             return new PlanetTheme(
                 key,
                 displayName,
                 supportsLife: false,
+                hasSurfaceWater: true,
                 terrainBands:
                 [
                     new TerrainColorBand(0f, 0.14f, deepPrimary, lowPrimary),
@@ -262,8 +283,8 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                 ],
                 riverLowColor: Color.Transparent,
                 riverHighColor: Color.Transparent,
-                waterLowColor: Color.Transparent,
-                waterHighColor: Color.Transparent);
+                waterLowColor: waterLowColor,
+                waterHighColor: waterHighColor);
         }
 
         private static int CombineThemeSeed(string key, string displayName, Color primary, Color accent)

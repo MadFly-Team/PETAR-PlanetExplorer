@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "targets": {
     "net8.0": {
       "MonoGame.Content.Builder.Task/3.8.4.1": {
@@ -129,6 +129,30 @@
         },
         "runtime": {
           "lib/netcoreapp2.0/_._": {}
+        }
+      },
+      "VoxelPrototype.Core/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "compile": {
+          "bin/placeholder/VoxelPrototype.Core.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/VoxelPrototype.Core.dll": {}
+        }
+      },
+      "VoxelPrototype.Renderer/1.0.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "dependencies": {
+          "MonoGame.Framework.DesktopGL": "3.8.0",
+          "VoxelPrototype.Core": "1.0.0"
+        },
+        "compile": {
+          "bin/placeholder/VoxelPrototype.Renderer.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/VoxelPrototype.Renderer.dll": {}
         }
       }
     }
@@ -286,12 +310,24 @@
         "useSharedDesignerContext.txt",
         "version.txt"
       ]
+    },
+    "VoxelPrototype.Core/1.0.0": {
+      "type": "project",
+      "path": "../VoxelPrototype.Core/VoxelPrototype.Core.csproj",
+      "msbuildProject": "../VoxelPrototype.Core/VoxelPrototype.Core.csproj"
+    },
+    "VoxelPrototype.Renderer/1.0.0": {
+      "type": "project",
+      "path": "../VoxelPrototype.Renderer/VoxelPrototype.Renderer.csproj",
+      "msbuildProject": "../VoxelPrototype.Renderer/VoxelPrototype.Renderer.csproj"
     }
   },
   "projectFileDependencyGroups": {
     "net8.0": [
       "MonoGame.Content.Builder.Task >= 3.8.*",
-      "MonoGame.Framework.DesktopGL >= 3.8.*"
+      "MonoGame.Framework.DesktopGL >= 3.8.*",
+      "VoxelPrototype.Core >= 1.0.0",
+      "VoxelPrototype.Renderer >= 1.0.0"
     ]
   },
   "packageFolders": {
@@ -301,11 +337,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "D:\\NewProjects\\Games\\PETAR-PlanetExplorer\\PETAR-PlanetExplorer\\PETAR-PlanetExplorer.csproj",
+      "projectUniqueName": "D:\\NewProjects\\Games\\PETAR-PlanetExplorer\\Trunk\\PETAR-PlanetExplorer\\PETAR-PlanetExplorer.csproj",
       "projectName": "PETAR-PlanetExplorer",
-      "projectPath": "D:\\NewProjects\\Games\\PETAR-PlanetExplorer\\PETAR-PlanetExplorer\\PETAR-PlanetExplorer.csproj",
+      "projectPath": "D:\\NewProjects\\Games\\PETAR-PlanetExplorer\\Trunk\\PETAR-PlanetExplorer\\PETAR-PlanetExplorer.csproj",
       "packagesPath": "C:\\Users\\neilb\\.nuget\\packages\\",
-      "outputPath": "D:\\NewProjects\\Games\\PETAR-PlanetExplorer\\BenchmarkSuite1\\bin\\Release\\net8.0\\BenchmarkSuite1-DefaultJob-1/\\obj\\PETAR-PlanetExplorer\\",
+      "outputPath": "D:\\NewProjects\\Games\\PETAR-PlanetExplorer\\Trunk\\BenchmarkSuite1\\bin\\Release\\net8.0\\BenchmarkSuite1-DefaultJob-1/\\obj\\PETAR-PlanetExplorer\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -324,8 +360,16 @@
       },
       "frameworks": {
         "net8.0": {
+          "framework": "net8.0",
           "targetAlias": "net8.0",
-          "projectReferences": {}
+          "projectReferences": {
+            "D:\\NewProjects\\Games\\PETAR-PlanetExplorer\\Trunk\\VoxelPrototype.Core\\VoxelPrototype.Core.csproj": {
+              "projectPath": "D:\\NewProjects\\Games\\PETAR-PlanetExplorer\\Trunk\\VoxelPrototype.Core\\VoxelPrototype.Core.csproj"
+            },
+            "D:\\NewProjects\\Games\\PETAR-PlanetExplorer\\Trunk\\VoxelPrototype.Renderer\\VoxelPrototype.Renderer.csproj": {
+              "projectPath": "D:\\NewProjects\\Games\\PETAR-PlanetExplorer\\Trunk\\VoxelPrototype.Renderer\\VoxelPrototype.Renderer.csproj"
+            }
+          }
         }
       },
       "warningProperties": {
@@ -338,10 +382,11 @@
         "auditLevel": "low",
         "auditMode": "direct"
       },
-      "SdkAnalysisLevel": "10.0.200"
+      "SdkAnalysisLevel": "10.0.300"
     },
     "frameworks": {
       "net8.0": {
+        "framework": "net8.0",
         "targetAlias": "net8.0",
         "dependencies": {
           "MonoGame.Content.Builder.Task": {
@@ -369,7 +414,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.201/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.300-preview.0.26177.108/PortableRuntimeIdentifierGraph.json"
       }
     }
   }

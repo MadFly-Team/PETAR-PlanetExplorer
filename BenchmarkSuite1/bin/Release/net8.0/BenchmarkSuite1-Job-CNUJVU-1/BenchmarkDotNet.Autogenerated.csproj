@@ -34,7 +34,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="D:\NewProjects\Games\PETAR-PlanetExplorer\BenchmarkSuite1\BenchmarkSuite1.csproj" />
+    <ProjectReference Include="D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuite1\BenchmarkSuite1.csproj" />
   </ItemGroup>
 
   <!-- Begin copied settings from benchmarks project -->

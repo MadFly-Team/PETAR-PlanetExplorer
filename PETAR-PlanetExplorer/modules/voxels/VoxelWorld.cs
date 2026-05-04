@@ -80,6 +80,24 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
             return true;
         }
 
+        internal VoxelChunk GetOrCreateChunkForBulkUpdate(VoxelChunkKey key)
+        {
+            return GetOrCreateChunk(key);
+        }
+
+        internal void AdoptChunksFrom(VoxelWorld source)
+        {
+            if (source == null)
+            {
+                return;
+            }
+
+            foreach (var chunkEntry in source._chunks)
+            {
+                _chunks[chunkEntry.Key] = chunkEntry.Value;
+            }
+        }
+
         public bool TryGetTopSolidVoxel(int x, int y, out int topZ)
         {
             for (var z = VoxelConstants.WorldHeight - 1; z >= 0; z--)
@@ -197,12 +215,35 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
 
         private void MarkNeighborChunksDirty(VoxelChunkKey chunkKey, int localX, int localY, int localZ)
         {
-            MarkChunkDirty(chunkKey.X - (localX == 0 ? 1 : 0), chunkKey.Y, chunkKey.Z);
-            MarkChunkDirty(chunkKey.X + (localX == VoxelConstants.ChunkSize - 1 ? 1 : 0), chunkKey.Y, chunkKey.Z);
-            MarkChunkDirty(chunkKey.X, chunkKey.Y - (localY == 0 ? 1 : 0), chunkKey.Z);
-            MarkChunkDirty(chunkKey.X, chunkKey.Y + (localY == VoxelConstants.ChunkSize - 1 ? 1 : 0), chunkKey.Z);
-            MarkChunkDirty(chunkKey.X, chunkKey.Y, chunkKey.Z - (localZ == 0 ? 1 : 0));
-            MarkChunkDirty(chunkKey.X, chunkKey.Y, chunkKey.Z + (localZ == VoxelConstants.ChunkSize - 1 ? 1 : 0));
+            if (localX == 0)
+            {
+                MarkChunkDirty(chunkKey.X - 1, chunkKey.Y, chunkKey.Z);
+            }
+
+            if (localX == VoxelConstants.ChunkSize - 1)
+            {
+                MarkChunkDirty(chunkKey.X + 1, chunkKey.Y, chunkKey.Z);
+            }
+
+            if (localY == 0)
+            {
+                MarkChunkDirty(chunkKey.X, chunkKey.Y - 1, chunkKey.Z);
+            }
+
+            if (localY == VoxelConstants.ChunkSize - 1)
+            {
+                MarkChunkDirty(chunkKey.X, chunkKey.Y + 1, chunkKey.Z);
+            }
+
+            if (localZ == 0)
+            {
+                MarkChunkDirty(chunkKey.X, chunkKey.Y, chunkKey.Z - 1);
+            }
+
+            if (localZ == VoxelConstants.ChunkSize - 1)
+            {
+                MarkChunkDirty(chunkKey.X, chunkKey.Y, chunkKey.Z + 1);
+            }
         }
 
         private void MarkChunkDirty(int chunkX, int chunkY, int chunkZ)

@@ -7,7 +7,7 @@ using Microsoft.Xna.Framework.Input;
 using PETAR_PlanetExplorer.Modules.Debug;
 using PETAR_PlanetExplorer.Modules.Maps;
 using PETAR_PlanetExplorer.Modules.UI;
-using PETAR_PlanetExplorer.Modules.Voxels;
+using VoxelPrototype.Renderer;
 
 namespace PETAR_PlanetExplorer
 {
@@ -38,6 +38,21 @@ namespace PETAR_PlanetExplorer
         private const float PayloadReleaseYOffset = 6f;
         private const float PayloadDropGravity = 18f;
         private const float PayloadDropHorizontalDrag = 0.12f;
+        private const float TruckMaxCruiseSpeed = 18f;
+        private const float TruckMaxBoostSpeed = 28f;
+        private const float TruckTurnSpeed = 1.4f;
+        private const float TruckAcceleration = 26f;
+        private const float TruckDeceleration = 20f;
+        private const float TruckGroundClearance = 1.8f;
+        private const float TruckCollisionStepHeight = RenderCubeHeight * 2f;
+        private const float TruckCameraDistanceDefault = 26f;
+        private const float TruckCameraDistanceMin = 12f;
+        private const float TruckCameraDistanceMax = 48f;
+        private const float TruckCameraZoomStep = 1.5f;
+        private const float TruckCameraPitchMin = -1.1f;
+        private const float TruckCameraPitchMax = -0.12f;
+        private const float TruckTiltSampleDistance = 2.4f;
+        private const float TruckTiltLerpSpeed = 12f;
         private const float MissileSpeed = 180f;
         private const float MissileMaxRange = 300f;
         private const float DefaultMissileExplosionRadius = 10f;
@@ -56,18 +71,13 @@ namespace PETAR_PlanetExplorer
         private const float MouseLookSensitivity = 0.0032f;
         private const float MaxLookPitch = MathHelper.PiOver2;
         private const int TerrainEditSlotCount = 3;
-        private const int VoxelStreamRegionSize = 128;
-        private const int VoxelStreamRadius = 2;
-
         private GraphicsDeviceManager _graphics;
         private SpriteBatch _spriteBatch;
         private SpriteFont _spaceFont;
         private Texture2D _heightMapTexture;
         private Texture2D _pixel;
         private HeightMapFlyoverRenderer _horizontalViewRenderer;
-        private VoxelRenderer _voxelRenderer;
-        private VoxelWorld _voxelWorld;
-        private Task<(int RequestId, VoxelRegionKey RegionKey, VoxelWorld RegionWorld)> _voxelWorldBuildTask;
+        private VoxelPrototypeRenderer _voxelRenderer;
         private Point _horizontalViewRenderSize;
         private ProceduralWorldMap _worldMap;
         private Task<(ProceduralWorldMap WorldMap, Color[] ColorMap)> _worldGenerationTask;
@@ -82,11 +92,13 @@ namespace PETAR_PlanetExplorer
         private float _worldTime;
         private bool _exitRequested;
         private bool _usePlanView = true;
+        private bool _useVoxelHorizontalRenderer;
         private bool _terrainFollowMode;
         private bool _mouseLookInitialized;
         private bool _payloadReleased;
         private bool _fallingPayloadActive;
-        private bool _useVoxelWorldView;
+        private bool _useGouraudHorizontalShading = true;
+        private ActiveVehicleMode _activeVehicleMode = ActiveVehicleMode.Ship;
         private KeyboardState _previousKeyboardState;
         private MouseState _previousMouseState;
         private string _worldGenerationStatus = "Preparing world generation";
@@ -103,13 +115,12 @@ namespace PETAR_PlanetExplorer
         private readonly List<HeightMapFlyoverRenderer.OilPlatformInstance> _oilPlatforms = new();
         private readonly List<HeightMapFlyoverRenderer.MissileDebrisParticle> _missileDebris = new();
         private readonly List<TerrainEditRecord> _terrainEditRecords = new();
-        private readonly Queue<VoxelRegionKey> _pendingVoxelRegions = new();
-        private readonly HashSet<VoxelRegionKey> _queuedVoxelRegions = new();
-        private readonly HashSet<VoxelRegionKey> _loadedVoxelRegions = new();
         private string[] _terrainSlotLabels = CreateDefaultTerrainSlotLabels();
-        private string _voxelBuildStatus = "Voxel world idle";
-        private int _voxelBuildRequestId;
         private MissileState? _activeMissile;
+        private TruckState _truck;
+        private float _truckCameraYaw;
+        private float _truckCameraPitch = -0.38f;
+        private float _truckCameraDistance = TruckCameraDistanceDefault;
 
         public PETARPlanetExplorer()
         {
@@ -206,19 +217,39 @@ namespace PETAR_PlanetExplorer
 
             if (keyboardState.IsKeyDown(Keys.F6) && !_previousKeyboardState.IsKeyDown(Keys.F6) && _worldGenerationTask == null)
             {
-                ClearPersistedTerrainEdits();
-            }
+                _useGouraudHorizontalShading = !_useGouraudHorizontalShading;
+                if (_horizontalViewRenderer != null)
+                {
+                    _horizontalViewRenderer.SetUseGouraudShading(_useGouraudHorizontalShading);
+                }
 
-            if (keyboardState.IsKeyDown(Keys.F7) && !_previousKeyboardState.IsKeyDown(Keys.F7) && _worldMap != null)
-            {
-                _useVoxelWorldView = !_useVoxelWorldView;
-                DebugLogger.Info($"Voxel world view enabled: {_useVoxelWorldView}.");
+                DebugLogger.Info($"Horizontal shading toggled. Gouraud shading enabled: {_useGouraudHorizontalShading}.");
             }
 
             if (keyboardState.IsKeyDown(Keys.F8) && !_previousKeyboardState.IsKeyDown(Keys.F8) && _worldGenerationTask == null)
             {
                 _generationDialog.Open(_generationSettings, _activeTerrainEditSlot, TerrainEditSlotCount, _terrainSlotLabels);
                 IsMouseVisible = true;
+            }
+
+            if (keyboardState.IsKeyDown(Keys.F7) && !_previousKeyboardState.IsKeyDown(Keys.F7) && _worldGenerationTask == null && _worldMap != null)
+            {
+                _useVoxelHorizontalRenderer = !_useVoxelHorizontalRenderer;
+                if (_useVoxelHorizontalRenderer)
+                {
+                    EnsureVoxelRenderer();
+                }
+
+                DebugLogger.Info($"Horizontal renderer toggled. Voxel renderer enabled: {_useVoxelHorizontalRenderer}.");
+            }
+
+            if (keyboardState.IsKeyDown(Keys.Tab) && !_previousKeyboardState.IsKeyDown(Keys.Tab) && _worldGenerationTask == null && _worldMap != null)
+            {
+                _activeVehicleMode = _activeVehicleMode == ActiveVehicleMode.Ship
+                    ? ActiveVehicleMode.Truck
+                    : ActiveVehicleMode.Ship;
+                _mouseLookInitialized = false;
+                DebugLogger.Info($"Active vehicle switched to {_activeVehicleMode}.");
             }
 
             if (_generationDialog != null && _generationDialog.IsOpen)
@@ -294,20 +325,31 @@ namespace PETAR_PlanetExplorer
 
             if (!_usePlanView)
             {
-                UpdateMouseLook();
+                if (_activeVehicleMode == ActiveVehicleMode.Ship)
+                {
+                    UpdateMouseLook();
+                }
+                else if (_activeVehicleMode == ActiveVehicleMode.Truck)
+                {
+                    UpdateTruckCamera(mouseState);
+                }
             }
 
-            if (keyboardState.IsKeyDown(Keys.P) && !_previousKeyboardState.IsKeyDown(Keys.P))
+            if (_activeVehicleMode == ActiveVehicleMode.Ship && keyboardState.IsKeyDown(Keys.P) && !_previousKeyboardState.IsKeyDown(Keys.P))
             {
                 TryReleasePayload(GetLookDirection());
             }
 
-            if (!_usePlanView && keyboardState.IsKeyDown(Keys.M) && !_previousKeyboardState.IsKeyDown(Keys.M))
+            if (_activeVehicleMode == ActiveVehicleMode.Ship && !_usePlanView && keyboardState.IsKeyDown(Keys.M) && !_previousKeyboardState.IsKeyDown(Keys.M))
             {
                 TryFireMissile(GetLookDirection());
             }
 
-            if (_terrainFollowMode)
+            if (_activeVehicleMode == ActiveVehicleMode.Truck)
+            {
+                UpdateTruck(keyboardState, deltaTime);
+            }
+            else if (_terrainFollowMode)
             {
                 _verticalVelocity = 0f;
             }
@@ -324,76 +366,67 @@ namespace PETAR_PlanetExplorer
                 _verticalVelocity = AccelerateTowards(_verticalVelocity, 0f, VerticalAcceleration, deltaTime);
             }
 
-            var isBoosting = keyboardState.IsKeyDown(Keys.LeftShift) || keyboardState.IsKeyDown(Keys.RightShift);
-            var movementInput = 0f;
-            if (keyboardState.IsKeyDown(Keys.W) || keyboardState.IsKeyDown(Keys.Up))
+            if (_activeVehicleMode == ActiveVehicleMode.Ship)
             {
-                movementInput += 1f;
-            }
-
-            if (keyboardState.IsKeyDown(Keys.S) || keyboardState.IsKeyDown(Keys.Down))
-            {
-                movementInput -= 1f;
-            }
-
-            var turnInput = 0f;
-            if (keyboardState.IsKeyDown(Keys.A) || keyboardState.IsKeyDown(Keys.Left))
-            {
-                turnInput -= 1f;
-            }
-
-            if (keyboardState.IsKeyDown(Keys.D) || keyboardState.IsKeyDown(Keys.Right))
-            {
-                turnInput += 1f;
-            }
-
-            var targetForwardSpeed = movementInput * (isBoosting ? MaxBoostSpeed : MaxCruiseSpeed);
-            _forwardVelocity = AccelerateTowards(_forwardVelocity, targetForwardSpeed, MovementAcceleration, deltaTime);
-            _turnVelocity = AccelerateTowards(_turnVelocity, turnInput * MaxTurnSpeed, TurnAcceleration, deltaTime);
-            _flightHeading += _turnVelocity * deltaTime;
-            var lookDirection = GetLookDirection();
-            var travelVector = lookDirection * (_forwardVelocity * deltaTime);
-            var proposedPosition = ClampFlightPosition(_flightPosition + new Vector2(travelVector.X, travelVector.Z));
-            var altitudeDelta = (_verticalVelocity * deltaTime) + travelVector.Y;
-            if (_terrainFollowMode)
-            {
-                var followAltitude = GetTerrainFollowAltitude(proposedPosition, lookDirection);
-                if (_voxelWorld == null || HasVoxelFlightClearance(proposedPosition, lookDirection, followAltitude))
+                var isBoosting = keyboardState.IsKeyDown(Keys.LeftShift) || keyboardState.IsKeyDown(Keys.RightShift);
+                var movementInput = 0f;
+                if (keyboardState.IsKeyDown(Keys.W) || keyboardState.IsKeyDown(Keys.Up))
                 {
+                    movementInput += 1f;
+                }
+
+                if (keyboardState.IsKeyDown(Keys.S) || keyboardState.IsKeyDown(Keys.Down))
+                {
+                    movementInput -= 1f;
+                }
+
+                var turnInput = 0f;
+                if (keyboardState.IsKeyDown(Keys.A) || keyboardState.IsKeyDown(Keys.Left))
+                {
+                    turnInput -= 1f;
+                }
+
+                if (keyboardState.IsKeyDown(Keys.D) || keyboardState.IsKeyDown(Keys.Right))
+                {
+                    turnInput += 1f;
+                }
+
+                var targetForwardSpeed = movementInput * (isBoosting ? MaxBoostSpeed : MaxCruiseSpeed);
+                _forwardVelocity = AccelerateTowards(_forwardVelocity, targetForwardSpeed, MovementAcceleration, deltaTime);
+                _turnVelocity = AccelerateTowards(_turnVelocity, turnInput * MaxTurnSpeed, TurnAcceleration, deltaTime);
+                _flightHeading += _turnVelocity * deltaTime;
+                var lookDirection = GetLookDirection();
+                var travelVector = lookDirection * (_forwardVelocity * deltaTime);
+                var proposedPosition = ClampFlightPosition(_flightPosition + new Vector2(travelVector.X, travelVector.Z));
+                var altitudeDelta = (_verticalVelocity * deltaTime) + travelVector.Y;
+                if (_terrainFollowMode)
+                {
+                    var followAltitude = GetTerrainFollowAltitude(proposedPosition, lookDirection);
                     _flightPosition = proposedPosition;
                     _flightAltitude = followAltitude;
                 }
                 else
                 {
-                    _flightAltitude = GetTerrainFollowAltitude(_flightPosition, lookDirection);
-                }
-            }
-            else
-            {
-                var proposedAltitude = _flightAltitude + altitudeDelta;
-                var clampedAltitude = MathHelper.Clamp(proposedAltitude, FlightAltitudeMinimum, MaxFlightAltitude);
-                var canUseVoxelClearance = _voxelWorld != null;
-                var hasFlightClearance = canUseVoxelClearance
-                    ? HasVoxelFlightClearance(proposedPosition, lookDirection, clampedAltitude)
-                    : clampedAltitude >= GetMinimumFlightAltitude(proposedPosition, lookDirection);
-                if (hasFlightClearance)
-                {
-                    _flightPosition = proposedPosition;
-                    _flightAltitude = clampedAltitude;
-                }
-                else
-                {
-                    var bounceDirection = new Vector2(travelVector.X, travelVector.Z);
-                    if (bounceDirection.LengthSquared() > 0.000001f)
+                    var proposedAltitude = _flightAltitude + altitudeDelta;
+                    var clampedAltitude = MathHelper.Clamp(proposedAltitude, FlightAltitudeMinimum, MaxFlightAltitude);
+                    var hasFlightClearance = clampedAltitude >= GetMinimumFlightAltitude(proposedPosition, lookDirection);
+                    if (hasFlightClearance)
                     {
-                        bounceDirection.Normalize();
-                        _flightPosition = ClampFlightPosition(_flightPosition - (bounceDirection * MathF.Max(0.05f, MathF.Abs(_forwardVelocity) * deltaTime * 0.35f)));
+                        _flightPosition = proposedPosition;
+                        _flightAltitude = clampedAltitude;
                     }
+                    else
+                    {
+                        var bounceDirection = new Vector2(travelVector.X, travelVector.Z);
+                        if (bounceDirection.LengthSquared() > 0.000001f)
+                        {
+                            bounceDirection.Normalize();
+                            _flightPosition = ClampFlightPosition(_flightPosition - (bounceDirection * MathF.Max(0.05f, MathF.Abs(_forwardVelocity) * deltaTime * 0.35f)));
+                        }
 
-                    _forwardVelocity = -_forwardVelocity * 0.35f;
-                    _flightAltitude = canUseVoxelClearance
-                        ? MathHelper.Clamp(_flightAltitude, FlightAltitudeMinimum, MaxFlightAltitude)
-                        : MathHelper.Clamp(_flightAltitude + altitudeDelta, GetMinimumFlightAltitude(_flightPosition, lookDirection), MaxFlightAltitude);
+                        _forwardVelocity = -_forwardVelocity * 0.35f;
+                        _flightAltitude = MathHelper.Clamp(_flightAltitude + altitudeDelta, GetMinimumFlightAltitude(_flightPosition, lookDirection), MaxFlightAltitude);
+                    }
                 }
             }
 
@@ -442,12 +475,18 @@ namespace PETAR_PlanetExplorer
             var title = "PROCEDURAL PLANET FLYOVER";
             var titleOrigin = _spaceFont.MeasureString(title) * 0.5f;
             var titlePosition = new Vector2(center.X, 24f);
-            var viewText = _usePlanView ? "Plan" : (_useVoxelWorldView ? "Voxel" : "Horizon");
+            var viewText = _usePlanView ? "Plan" : "Horizon";
             var flightModeText = _terrainFollowMode ? "Terrain follow" : "Manual altitude";
             var payloadStatus = _fallingPayloadActive ? "Payload dropping" : (_payloadReleased ? "Platform deployed" : "Payload attached");
-            var controlsText = $"Seed {_worldMap.Seed} // Theme {_worldMap.Theme.DisplayName} // {GetActiveTerrainSlotDisplayName()} // F8 custom world // F11 {viewText} view // F7 voxel render // F10 regenerate // F5 cycle edit slot // F6 clear saved edits // F9 {flightModeText} // Mouse look // W/S move // Q/E or Space/Ctrl or R/F altitude // A/D turn // Shift boost // P release payload // Heading {MathHelper.ToDegrees(_flightHeading):000} deg";
+            var rendererText = _usePlanView ? "Map" : (_useVoxelHorizontalRenderer ? "Voxel horizon" : "Standard horizon");
+            var vehicleText = _activeVehicleMode == ActiveVehicleMode.Truck ? "Truck" : "Ship";
+            var shadingText = _useGouraudHorizontalShading ? "Gouraud horizon" : "Flat horizon";
+            var controlsText = $"Seed {_worldMap.Seed} // Theme {_worldMap.Theme.DisplayName} // {GetActiveTerrainSlotDisplayName()} // Vehicle {vehicleText} // TAB switch vehicle // F8 custom world // F11 {viewText} view // F7 {rendererText} // F10 regenerate // F5 cycle edit slot // F6 {shadingText} // F9 {flightModeText} // Mouse look ship // Mouse orbit truck // Wheel zoom truck // W/S move // Q/E or Space/Ctrl or R/F altitude ship // A/D turn // Shift boost // P release payload // Heading {MathHelper.ToDegrees(_activeVehicleMode == ActiveVehicleMode.Truck ? _truck.Heading : _flightHeading):000} deg";
             var controlsOrigin = _spaceFont.MeasureString(controlsText) * 0.5f;
-            var altitudeText = $"Altitude {_flightAltitude:0.00} // Pitch {MathHelper.ToDegrees(_flightPitch):000} deg // Position {_flightPosition.X:0000}, {_flightPosition.Y:0000} // Mode {flightModeText} // {payloadStatus}{(_useVoxelWorldView ? $" // {_voxelBuildStatus}" : string.Empty)}";
+            var statusPosition = _activeVehicleMode == ActiveVehicleMode.Truck ? _truck.Position : _flightPosition;
+            var statusAltitudeText = _activeVehicleMode == ActiveVehicleMode.Truck ? _truck.WorldY.ToString("0.00") : _flightAltitude.ToString("0.00");
+            var statusPitch = _activeVehicleMode == ActiveVehicleMode.Truck ? 0f : MathHelper.ToDegrees(_flightPitch);
+            var altitudeText = $"Height {statusAltitudeText} // Pitch {statusPitch:000} deg // Position {statusPosition.X:0000}, {statusPosition.Y:0000} // Vehicle {vehicleText} // Mode {flightModeText} // {payloadStatus}";
 
             if (_usePlanView)
             {
@@ -484,6 +523,7 @@ namespace PETAR_PlanetExplorer
                     true));
 
             _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.LinearClamp, DepthStencilState.None, RasterizerState.CullNone);
+            DrawDevelopmentSiteMarkers(minimapRectangle);
             DrawOilPlatformMarkers(minimapRectangle);
             _generationDialog?.Draw(_spriteBatch, _spaceFont, _pixel, viewport);
             _spriteBatch.End();
@@ -506,145 +546,52 @@ namespace PETAR_PlanetExplorer
 
         private void DrawHorizontalView(Viewport viewport)
         {
-            if (_useVoxelWorldView)
+            if (_useVoxelHorizontalRenderer)
             {
-                EnsureVoxelRenderer();
-                EnsureVoxelWorld();
-                if (_voxelWorld == null)
-                {
-                    return;
-                }
-
-                var lookDirection = GetLookDirection();
-                var altitudeRatio = MathHelper.Clamp((_flightAltitude - FlightAltitudeMinimum) / (MaxFlightAltitude - FlightAltitudeMinimum), 0f, 1f);
-                var cameraEyeY = MathHelper.Lerp(RenderCameraMinEyeY, RenderCameraMaxEyeY, altitudeRatio);
-                var cameraEye = new Vector3(_flightPosition.X, cameraEyeY, _flightPosition.Y);
-                var view = Matrix.CreateLookAt(cameraEye, cameraEye + (lookDirection * 160f), Vector3.Up);
-                var projection = Matrix.CreatePerspectiveFieldOfView(MathHelper.ToRadians(56f), Math.Max(0.1f, viewport.AspectRatio), 1f, 4000f);
-                _voxelRenderer.Render(_voxelWorld, view, projection, cameraEye);
+                DrawVoxelHorizontalView(viewport);
                 return;
             }
 
             EnsureHorizontalViewRenderer(viewport);
-            _horizontalViewRenderer.Render(_worldMap, _flightPosition, _flightHeading, _flightPitch, _flightAltitude, MaxFlightAltitude, _worldTime, _payloadReleased, _oilPlatforms, GetMissileRenderState(), _missileDebris);
+            _horizontalViewRenderer.SetUseGouraudShading(_useGouraudHorizontalShading);
+            _horizontalViewRenderer.Render(_worldMap, BuildWorldViewState(), _worldTime, _payloadReleased, _oilPlatforms, GetMissileRenderState(), _missileDebris);
         }
 
-        private void EnsureVoxelRenderer()
-        {
-            _voxelRenderer ??= new VoxelRenderer(GraphicsDevice);
-        }
-
-        private void EnsureVoxelWorld()
+        private void DrawVoxelHorizontalView(Viewport viewport)
         {
             if (_worldMap == null)
             {
                 return;
             }
 
-            _voxelWorld ??= new VoxelWorld();
-            QueueVoxelRegionsAroundPlayer();
-            TryCompleteVoxelRegionBuild();
+            EnsureVoxelRenderer();
 
-            if (_voxelWorldBuildTask == null)
+            var altitudeRatio = MathHelper.Clamp((_flightAltitude - FlightAltitudeMinimum) / (MaxFlightAltitude - FlightAltitudeMinimum), 0f, 1f);
+            var pitchCos = MathF.Cos(_flightPitch);
+            var forward = Vector3.Normalize(new Vector3(
+                MathF.Cos(_flightHeading) * pitchCos,
+                MathF.Sin(_flightPitch),
+                MathF.Sin(_flightHeading) * pitchCos));
+            var cameraRight = Vector3.Cross(Vector3.Up, forward);
+            if (cameraRight.LengthSquared() < 0.0001f)
             {
-                StartNextVoxelRegionBuild();
-            }
-        }
-
-        private void QueueVoxelRegionsAroundPlayer()
-        {
-            if (_worldMap == null)
-            {
-                return;
+                cameraRight = Vector3.Cross(Vector3.Forward, forward);
             }
 
-            var centerRegionX = Math.Clamp((int)MathF.Floor(_flightPosition.X / VoxelStreamRegionSize), 0, Math.Max(0, (_worldMap.Width - 1) / VoxelStreamRegionSize));
-            var centerRegionY = Math.Clamp((int)MathF.Floor(_flightPosition.Y / VoxelStreamRegionSize), 0, Math.Max(0, (_worldMap.Height - 1) / VoxelStreamRegionSize));
-            for (var ring = 0; ring <= VoxelStreamRadius; ring++)
-            {
-                for (var offsetY = -ring; offsetY <= ring; offsetY++)
-                {
-                    for (var offsetX = -ring; offsetX <= ring; offsetX++)
-                    {
-                        if (Math.Max(Math.Abs(offsetX), Math.Abs(offsetY)) != ring)
-                        {
-                            continue;
-                        }
+            cameraRight.Normalize();
+            var cameraUp = Vector3.Normalize(Vector3.Cross(forward, cameraRight));
+            var cameraEyeY = MathHelper.Lerp(RenderCameraMinEyeY, RenderCameraMaxEyeY, altitudeRatio);
+            var cameraPosition = new Vector3(_flightPosition.X, cameraEyeY, _flightPosition.Y);
+            var lookDistance = MathHelper.Lerp(92f, 192f, altitudeRatio);
+            var lookTarget = cameraPosition + (forward * lookDistance);
+            var view = Matrix.CreateLookAt(cameraPosition, lookTarget, cameraUp);
+            var projection = Matrix.CreatePerspectiveFieldOfView(
+                MathHelper.ToRadians(56f),
+                Math.Max(0.1f, viewport.AspectRatio),
+                1f,
+                2000f);
 
-                        var regionKey = new VoxelRegionKey(centerRegionX + offsetX, centerRegionY + offsetY);
-                        if (regionKey.X < 0 || regionKey.Y < 0)
-                        {
-                            continue;
-                        }
-
-                        var minWorldX = regionKey.X * VoxelStreamRegionSize;
-                        var minWorldY = regionKey.Y * VoxelStreamRegionSize;
-                        if (minWorldX >= _worldMap.Width || minWorldY >= _worldMap.Height)
-                        {
-                            continue;
-                        }
-
-                        if (_loadedVoxelRegions.Contains(regionKey) || _queuedVoxelRegions.Contains(regionKey))
-                        {
-                            continue;
-                        }
-
-                        _pendingVoxelRegions.Enqueue(regionKey);
-                        _queuedVoxelRegions.Add(regionKey);
-                    }
-                }
-            }
-        }
-
-        private void StartNextVoxelRegionBuild()
-        {
-            if (_worldMap == null || _voxelWorldBuildTask != null || _pendingVoxelRegions.Count == 0)
-            {
-                return;
-            }
-
-            var requestId = _voxelBuildRequestId;
-            var worldMap = _worldMap;
-            var regionKey = _pendingVoxelRegions.Dequeue();
-            var minWorldX = regionKey.X * VoxelStreamRegionSize;
-            var maxWorldX = Math.Min(worldMap.Width - 1, minWorldX + VoxelStreamRegionSize - 1);
-            var minWorldY = regionKey.Y * VoxelStreamRegionSize;
-            var maxWorldY = Math.Min(worldMap.Height - 1, minWorldY + VoxelStreamRegionSize - 1);
-            _voxelBuildStatus = $"Streaming voxel region {regionKey.X},{regionKey.Y}";
-            _voxelWorldBuildTask = Task.Run(() =>
-            {
-                var regionWorld = VoxelWorldBuilder.CreateRegionFromHeightMap(worldMap, minWorldX, maxWorldX, minWorldY, maxWorldY);
-                return (requestId, regionKey, regionWorld);
-            });
-        }
-
-        private void TryCompleteVoxelRegionBuild()
-        {
-            if (_voxelWorldBuildTask == null || !_voxelWorldBuildTask.IsCompleted)
-            {
-                return;
-            }
-
-            if (_voxelWorldBuildTask.IsFaulted)
-            {
-                DebugLogger.Critical("Voxel world generation failed.", _voxelWorldBuildTask.Exception?.GetBaseException());
-                throw _voxelWorldBuildTask.Exception?.GetBaseException() ?? new InvalidOperationException("Voxel world generation failed.");
-            }
-
-            var result = _voxelWorldBuildTask.Result;
-            _voxelWorldBuildTask = null;
-            if (result.RequestId != _voxelBuildRequestId)
-            {
-                return;
-            }
-
-            _voxelWorld ??= new VoxelWorld();
-            _voxelWorld.MergeFrom(result.RegionWorld);
-            _loadedVoxelRegions.Add(result.RegionKey);
-            _queuedVoxelRegions.Remove(result.RegionKey);
-            _voxelBuildStatus = _pendingVoxelRegions.Count == 0
-                ? $"Voxel streaming ready ({_loadedVoxelRegions.Count} regions)"
-                : $"Voxel streaming {_loadedVoxelRegions.Count} regions loaded";
+            _voxelRenderer.Render(view, projection, cameraPosition, forward, _worldMap.Seed);
         }
 
         private void UpdateMouseLook()
@@ -693,6 +640,7 @@ namespace PETAR_PlanetExplorer
 
             _horizontalViewRenderer?.Dispose();
             _horizontalViewRenderer = new HeightMapFlyoverRenderer(GraphicsDevice, _worldMap.Width, _worldMap.Height);
+            _horizontalViewRenderer.SetUseGouraudShading(_useGouraudHorizontalShading);
             _horizontalViewRenderSize = Point.Zero;
         }
 
@@ -734,11 +682,6 @@ namespace PETAR_PlanetExplorer
 
         private float GetTerrainFollowAltitude(Vector2 position, Vector3 lookDirection)
         {
-            if (TryGetVoxelTerrainFollowEyeY(position, lookDirection, out var voxelRequiredEyeY))
-            {
-                return MathHelper.Clamp(ConvertEyeYToFlightAltitude(voxelRequiredEyeY), FlightAltitudeMinimum, MaxFlightAltitude);
-            }
-
             var requiredEyeY = MathF.Max(
                 GetCollisionSurfaceTopY(position) + (TerrainFollowClearance * (RenderCameraMaxEyeY - RenderCameraMinEyeY)),
                 GetShipCollisionRequiredEyeY(position, lookDirection));
@@ -766,15 +709,6 @@ namespace PETAR_PlanetExplorer
             var shipCenterYOffset = GetShipCenterYOffset(lookDirection);
             var shipBottomExtent = _payloadReleased ? ShipCollisionBottomExtent : PayloadCollisionBottomExtent;
             var shipBottomYOffset = shipCenterYOffset - shipBottomExtent;
-
-            if (_voxelWorld != null)
-            {
-                var requiredEyeY = GetRequiredEyeYFromVoxelSupport(shipCenter, shipBottomYOffset, ShipCollisionHalfWidth);
-                requiredEyeY = MathF.Max(requiredEyeY, GetRequiredEyeYFromVoxelSupport(shipNose, shipBottomYOffset, ShipCollisionHalfWidth * 0.8f));
-                requiredEyeY = MathF.Max(requiredEyeY, GetRequiredEyeYFromVoxelSupport(shipLeft, shipBottomYOffset, ShipCollisionHalfWidth * 0.45f));
-                requiredEyeY = MathF.Max(requiredEyeY, GetRequiredEyeYFromVoxelSupport(shipRight, shipBottomYOffset, ShipCollisionHalfWidth * 0.45f));
-                return requiredEyeY;
-            }
 
             var terrainTopY = MathF.Max(GetCollisionSurfaceTopY(shipCenter), GetCollisionSurfaceTopY(shipNose));
             terrainTopY = MathF.Max(terrainTopY, GetCollisionSurfaceTopY(shipLeft));
@@ -833,15 +767,6 @@ namespace PETAR_PlanetExplorer
                 MathF.Floor(_fallingPayload.Position.Y) + 0.5f));
             var landedCubeHeight = MathHelper.Max(_worldMap.SampleVoxelHeight(landedCubePosition.X, landedCubePosition.Y), ProceduralWorldMap.SeaLevel);
             var landedCubeTopY = GetTerrainTopY(landedCubeHeight, _worldMap.MaxCubeColumn);
-            if (_voxelWorld != null)
-            {
-                var voxelX = (int)MathF.Floor(landedCubePosition.X);
-                var voxelY = (int)MathF.Floor(landedCubePosition.Y);
-                if (_voxelWorld.TryGetTopSolidBelow(voxelX, voxelY, VoxelConstants.WorldHeight - 1, out var topVoxelZ))
-                {
-                    landedCubeTopY = GetVoxelTopWorldY(topVoxelZ);
-                }
-            }
 
             var isSea = landedCubeHeight <= ProceduralWorldMap.SeaLevel;
             _oilPlatforms.Add(new HeightMapFlyoverRenderer.OilPlatformInstance(landedCubePosition, landedCubeTopY, isSea, _worldTime));
@@ -877,24 +802,6 @@ namespace PETAR_PlanetExplorer
             var nextWorldY = missile.WorldY + (missile.Direction.Y * stepDistance);
             var traveledDistance = missile.TraveledDistance + stepDistance;
 
-            if (_voxelWorld != null)
-            {
-                var startVoxel = new Vector3(previousPosition.X, previousPosition.Y, ConvertWorldYToVoxelZ(previousWorldY));
-                var endVoxel = new Vector3(nextPosition.X, nextPosition.Y, ConvertWorldYToVoxelZ(nextWorldY));
-                if (_voxelWorld.TryFindFirstSolidOnSegment(startVoxel, endVoxel, 0.35f, out var hitVoxel))
-                {
-                    missile = missile with
-                    {
-                        Position = _worldMap.WrapPosition(new Vector2(hitVoxel.X + 0.5f, hitVoxel.Y + 0.5f)),
-                        WorldY = GetVoxelTopWorldY(hitVoxel.Z),
-                        TraveledDistance = traveledDistance
-                    };
-                    _activeMissile = missile;
-                    ExplodeMissile(missile);
-                    return;
-                }
-            }
-
             missile = missile with { Position = nextPosition, WorldY = nextWorldY, TraveledDistance = traveledDistance };
             _activeMissile = missile;
 
@@ -915,7 +822,6 @@ namespace PETAR_PlanetExplorer
 
             _worldMap.DestroyTerrainSphere(missile.Position, missile.WorldY, missile.ExplosionRadius, ProtectedTerrainColumnHeight);
             RecordTerrainEdit(missile.Position, missile.WorldY, missile.ExplosionRadius, ProtectedTerrainColumnHeight);
-            SyncVoxelWorldRegion(missile.Position, missile.ExplosionRadius);
             SpawnMissileDebris(missile);
             RefreshWorldVisuals();
             _activeMissile = null;
@@ -988,6 +894,13 @@ namespace PETAR_PlanetExplorer
             _horizontalViewRenderer?.Dispose();
             _horizontalViewRenderer = null;
             _horizontalViewRenderSize = Point.Zero;
+            if (_worldMap != null && _voxelRenderer != null)
+            {
+                var altitudeRatio = MathHelper.Clamp((_flightAltitude - FlightAltitudeMinimum) / (MaxFlightAltitude - FlightAltitudeMinimum), 0f, 1f);
+                var cameraEyeY = MathHelper.Lerp(RenderCameraMinEyeY, RenderCameraMaxEyeY, altitudeRatio);
+                var cameraPosition = new Vector3(_flightPosition.X, cameraEyeY, _flightPosition.Y);
+                _voxelRenderer.RebuildWorld(_worldMap.Seed, cameraPosition);
+            }
         }
 
         private void RecordTerrainEdit(Vector2 center, float centerWorldY, float radius, int protectedColumnHeight)
@@ -1035,18 +948,177 @@ namespace PETAR_PlanetExplorer
             StartWorldGeneration(_worldMap.Seed);
         }
 
-        private void SyncVoxelWorldRegion(Vector2 center, float radius)
+        private HeightMapFlyoverRenderer.WorldViewState BuildWorldViewState()
         {
-            if (_voxelWorld == null || _worldMap == null)
+            if (_activeVehicleMode == ActiveVehicleMode.Truck)
+            {
+                return new HeightMapFlyoverRenderer.WorldViewState(
+                    _truck.Position,
+                    _truckCameraYaw,
+                    _truckCameraPitch,
+                    0.05f,
+                    MaxFlightAltitude,
+                    false,
+                    new HeightMapFlyoverRenderer.TruckWorldRenderState(Position: _truck.Position, WorldY: _truck.WorldY, Heading: _truck.Heading, WheelRotation: _truck.WheelRotation, Pitch: _truck.Pitch, IsVisible: true),
+                    true,
+                    _truckCameraDistance);
+            }
+
+            return new HeightMapFlyoverRenderer.WorldViewState(
+                _flightPosition,
+                _flightHeading,
+                _flightPitch,
+                _flightAltitude,
+                MaxFlightAltitude,
+                true,
+                new HeightMapFlyoverRenderer.TruckWorldRenderState(Position: _truck.Position, WorldY: _truck.WorldY, Heading: _truck.Heading, WheelRotation: _truck.WheelRotation, Pitch: _truck.Pitch, IsVisible: true),
+                false,
+                TruckCameraDistanceDefault);
+        }
+
+        private void InitializeTruckState()
+        {
+            var spawnPosition = _flightPosition;
+            if (_worldMap != null)
+            {
+                IReadOnlyList<Vector2> developmentSites = _worldMap.GetDevelopmentSiteCenters();
+                if (developmentSites.Count > 0)
+                {
+                    spawnPosition = _worldMap.WrapPosition(developmentSites[0]);
+                }
+                else
+                {
+                    spawnPosition = _worldMap.WrapPosition(_flightPosition);
+                }
+            }
+
+            _truck = new TruckState(
+                spawnPosition,
+                _flightHeading,
+                GetTruckGroundY(spawnPosition),
+                0f,
+                0f,
+                0f);
+            _truckCameraYaw = _truck.Heading;
+            _truckCameraPitch = -0.38f;
+            _truckCameraDistance = TruckCameraDistanceDefault;
+        }
+
+        private void UpdateTruckCamera(MouseState mouseState)
+        {
+            if (!IsActive)
+            {
+                _mouseLookInitialized = false;
+                return;
+            }
+
+            var centerX = Window.ClientBounds.Width / 2;
+            var centerY = Window.ClientBounds.Height / 2;
+            if (!_mouseLookInitialized)
+            {
+                Mouse.SetPosition(centerX, centerY);
+                _mouseLookInitialized = true;
+                return;
+            }
+
+            var wheelDelta = mouseState.ScrollWheelValue - _previousMouseState.ScrollWheelValue;
+            if (wheelDelta != 0)
+            {
+                _truckCameraDistance = MathHelper.Clamp(
+                    _truckCameraDistance - (Math.Sign(wheelDelta) * TruckCameraZoomStep),
+                    TruckCameraDistanceMin,
+                    TruckCameraDistanceMax);
+            }
+
+            var deltaX = mouseState.X - centerX;
+            var deltaY = mouseState.Y - centerY;
+            if (deltaX != 0 || deltaY != 0)
+            {
+                _truckCameraYaw += deltaX * MouseLookSensitivity;
+                _truckCameraPitch = MathHelper.Clamp(_truckCameraPitch - (deltaY * MouseLookSensitivity), TruckCameraPitchMin, TruckCameraPitchMax);
+                Mouse.SetPosition(centerX, centerY);
+            }
+        }
+
+        private void UpdateTruck(KeyboardState keyboardState, float deltaTime)
+        {
+            if (_worldMap == null)
             {
                 return;
             }
 
-            var minWorldX = Math.Max(0, (int)MathF.Floor(center.X - radius) - 1);
-            var maxWorldX = Math.Min(_worldMap.Width - 1, (int)MathF.Ceiling(center.X + radius) + 1);
-            var minWorldY = Math.Max(0, (int)MathF.Floor(center.Y - radius) - 1);
-            var maxWorldY = Math.Min(_worldMap.Height - 1, (int)MathF.Ceiling(center.Y + radius) + 1);
-            VoxelWorldBuilder.SyncRegionFromHeightMap(_voxelWorld, _worldMap, minWorldX, maxWorldX, minWorldY, maxWorldY);
+            var movementInput = 0f;
+            if (keyboardState.IsKeyDown(Keys.W) || keyboardState.IsKeyDown(Keys.Up))
+            {
+                movementInput += 1f;
+            }
+
+            if (keyboardState.IsKeyDown(Keys.S) || keyboardState.IsKeyDown(Keys.Down))
+            {
+                movementInput -= 1f;
+            }
+
+            var turnInput = 0f;
+            if (keyboardState.IsKeyDown(Keys.A) || keyboardState.IsKeyDown(Keys.Left))
+            {
+                turnInput -= 1f;
+            }
+
+            if (keyboardState.IsKeyDown(Keys.D) || keyboardState.IsKeyDown(Keys.Right))
+            {
+                turnInput += 1f;
+            }
+
+            var isBoosting = keyboardState.IsKeyDown(Keys.LeftShift) || keyboardState.IsKeyDown(Keys.RightShift);
+            var targetSpeed = movementInput * (isBoosting ? TruckMaxBoostSpeed : TruckMaxCruiseSpeed);
+            var acceleration = MathF.Abs(targetSpeed) > MathF.Abs(_truck.Speed) ? TruckAcceleration : TruckDeceleration;
+            var truckSpeed = AccelerateTowards(_truck.Speed, targetSpeed, acceleration, deltaTime);
+            var turnScale = MathHelper.Clamp(MathF.Abs(truckSpeed) / TruckMaxCruiseSpeed, 0.2f, 1f);
+            var truckHeading = _truck.Heading + (turnInput * TruckTurnSpeed * deltaTime * turnScale);
+            var forward = new Vector2(MathF.Cos(truckHeading), MathF.Sin(truckHeading));
+            var desiredPosition = _worldMap.WrapPosition(_truck.Position + (forward * truckSpeed * deltaTime));
+            var nextPosition = desiredPosition;
+            var currentGroundY = GetTruckGroundY(_truck.Position);
+            var desiredGroundY = GetTruckGroundY(desiredPosition);
+            if (desiredGroundY - currentGroundY >= TruckCollisionStepHeight)
+            {
+                nextPosition = _truck.Position;
+                desiredGroundY = currentGroundY;
+                truckSpeed = 0f;
+            }
+
+            var traveledDistance = truckSpeed * deltaTime;
+            var nextTilt = ComputeTruckPitch(nextPosition, truckHeading);
+            _truck = _truck with
+            {
+                Position = nextPosition,
+                Heading = truckHeading,
+                Speed = truckSpeed,
+                WorldY = desiredGroundY,
+                WheelRotation = _truck.WheelRotation - (traveledDistance * 1.8f),
+                Pitch = MathHelper.Lerp(_truck.Pitch, nextTilt, MathHelper.Clamp(deltaTime * TruckTiltLerpSpeed, 0f, 1f))
+            };
+        }
+
+        private float ComputeTruckPitch(Vector2 position, float heading)
+        {
+            if (_worldMap == null)
+            {
+                return 0f;
+            }
+
+            var forward = new Vector2(MathF.Cos(heading), MathF.Sin(heading));
+            var frontSample = _worldMap.WrapPosition(position + (forward * TruckTiltSampleDistance));
+            var backSample = _worldMap.WrapPosition(position - (forward * TruckTiltSampleDistance));
+            var frontY = GetTruckGroundY(frontSample);
+            var backY = GetTruckGroundY(backSample);
+            var pitch = MathF.Atan2(backY - frontY, TruckTiltSampleDistance * 2f);
+            return MathHelper.Clamp(pitch, -0.42f, 0.42f);
+        }
+
+        private float GetTruckGroundY(Vector2 position)
+        {
+            return GetCollisionSurfaceTopY(position) + TruckGroundClearance;
         }
 
         private static float GetShipCenterYOffset(Vector3 lookDirection)
@@ -1080,16 +1152,6 @@ namespace PETAR_PlanetExplorer
 
         private float GetCollisionSurfaceTopY(Vector2 position)
         {
-            if (_voxelWorld != null)
-            {
-                var voxelX = (int)MathF.Floor(position.X);
-                var voxelY = (int)MathF.Floor(position.Y);
-                if (_voxelWorld.TryGetTopSolidVoxel(voxelX, voxelY, out var topVoxelZ))
-                {
-                    return GetVoxelTopWorldY(topVoxelZ);
-                }
-            }
-
             var maxTerrainHeight = _worldMap.SampleHeight(position.X, position.Y);
             maxTerrainHeight = MathF.Max(maxTerrainHeight, _worldMap.SampleHeight(position.X - CameraCollisionExtent, position.Y - CameraCollisionExtent));
             maxTerrainHeight = MathF.Max(maxTerrainHeight, _worldMap.SampleHeight(position.X + CameraCollisionExtent, position.Y - CameraCollisionExtent));
@@ -1108,185 +1170,6 @@ namespace PETAR_PlanetExplorer
             var columnHeight = Math.Clamp((int)MathF.Round(surfaceHeight * (maxCubeColumn - 1)), 1, maxCubeColumn - 1);
             var renderVerticalOrigin = ProceduralWorldMap.SeaLevel * (maxCubeColumn - 1f);
             return ((columnHeight - renderVerticalOrigin) * RenderCubeHeight) + RenderFaceOverlap;
-        }
-
-        private static float GetVoxelTopWorldY(int voxelZ)
-        {
-            var renderVerticalOrigin = VoxelWorldBuilder.GetRenderVerticalOrigin();
-            return ((voxelZ - renderVerticalOrigin) * RenderCubeHeight) + RenderFaceOverlap;
-        }
-
-        private float GetVoxelSupportTopY(Vector2 position, float horizontalExtent)
-        {
-            return GetVoxelSupportTopY(position, horizontalExtent, VoxelConstants.WorldHeight - 1);
-        }
-
-        private float GetVoxelSupportTopY(Vector2 position, float horizontalExtent, int maxVoxelZ)
-        {
-            if (_voxelWorld == null)
-            {
-                return float.MinValue;
-            }
-
-            var minX = (int)MathF.Floor(position.X - horizontalExtent);
-            var maxX = (int)MathF.Floor(position.X + horizontalExtent);
-            var minY = (int)MathF.Floor(position.Y - horizontalExtent);
-            var maxY = (int)MathF.Floor(position.Y + horizontalExtent);
-            var supportTopY = float.MinValue;
-            for (var y = minY; y <= maxY; y++)
-            {
-                for (var x = minX; x <= maxX; x++)
-                {
-                    if (_voxelWorld.TryGetTopSolidBelow(x, y, maxVoxelZ, out var topVoxelZ))
-                    {
-                        supportTopY = MathF.Max(supportTopY, GetVoxelTopWorldY(topVoxelZ));
-                    }
-                }
-            }
-
-            return supportTopY;
-        }
-
-        private float GetRequiredEyeYFromVoxelSupport(Vector2 position, float shipBottomYOffset, float horizontalExtent)
-        {
-            var supportTopY = GetVoxelSupportTopY(position, horizontalExtent);
-            var requiredEyeY = (supportTopY == float.MinValue ? RenderCameraMinEyeY : supportTopY - shipBottomYOffset + ShipCollisionClearance);
-            for (var attempt = 0; attempt < 6; attempt++)
-            {
-                var bottomWorldY = requiredEyeY + shipBottomYOffset;
-                var minVoxel = new Vector3(position.X - horizontalExtent, position.Y - horizontalExtent, ConvertWorldYToVoxelZ(bottomWorldY - ShipCollisionClearance));
-                var maxVoxel = new Vector3(position.X + horizontalExtent, position.Y + horizontalExtent, ConvertWorldYToVoxelZ(bottomWorldY + ShipCollisionClearance));
-                if (!_voxelWorld.HasAnySolidInBox(minVoxel, maxVoxel))
-                {
-                    break;
-                }
-
-                requiredEyeY += RenderCubeHeight;
-            }
-
-            return requiredEyeY;
-        }
-
-        private bool TryGetVoxelTerrainFollowEyeY(Vector2 position, Vector3 lookDirection, out float requiredEyeY)
-        {
-            requiredEyeY = 0f;
-            if (_voxelWorld == null || _worldMap == null)
-            {
-                return false;
-            }
-
-            var currentEyeY = ConvertFlightAltitudeToEyeY(_flightAltitude);
-            var maxVoxelZ = Math.Clamp((int)MathF.Floor(ConvertWorldYToVoxelZ(currentEyeY)), 0, VoxelConstants.WorldHeight - 1);
-            var terrainClearanceY = TerrainFollowClearance * (RenderCameraMaxEyeY - RenderCameraMinEyeY);
-            var horizontalForward = new Vector2(lookDirection.X, lookDirection.Z);
-            if (horizontalForward.LengthSquared() < 0.0001f)
-            {
-                horizontalForward = new Vector2(MathF.Cos(_flightHeading), MathF.Sin(_flightHeading));
-            }
-            else
-            {
-                horizontalForward.Normalize();
-            }
-
-            var horizontalRight = new Vector2(-horizontalForward.Y, horizontalForward.X);
-            var shipCenter = _worldMap.WrapPosition(position + (horizontalForward * ShipCollisionForwardOffset));
-            var shipNose = _worldMap.WrapPosition(position + (horizontalForward * ShipCollisionNoseOffset));
-            var shipLeft = _worldMap.WrapPosition(shipCenter - (horizontalRight * ShipCollisionHalfWidth));
-            var shipRight = _worldMap.WrapPosition(shipCenter + (horizontalRight * ShipCollisionHalfWidth));
-            var shipCenterYOffset = GetShipCenterYOffset(lookDirection);
-            var shipBottomExtent = _payloadReleased ? ShipCollisionBottomExtent : PayloadCollisionBottomExtent;
-            var shipBottomYOffset = shipCenterYOffset - shipBottomExtent;
-
-            var foundSupport = false;
-            var cameraSupportTopY = GetVoxelSupportTopY(position, CameraCollisionExtent, maxVoxelZ);
-            if (cameraSupportTopY != float.MinValue)
-            {
-                requiredEyeY = cameraSupportTopY + terrainClearanceY;
-                foundSupport = true;
-            }
-
-            foundSupport |= TryAccumulateVoxelTerrainFollowSupport(shipCenter, ShipCollisionHalfWidth, maxVoxelZ, -shipBottomYOffset + ShipCollisionClearance, ref requiredEyeY);
-            foundSupport |= TryAccumulateVoxelTerrainFollowSupport(shipNose, ShipCollisionHalfWidth * 0.8f, maxVoxelZ, -shipBottomYOffset + ShipCollisionClearance, ref requiredEyeY);
-            foundSupport |= TryAccumulateVoxelTerrainFollowSupport(shipLeft, ShipCollisionHalfWidth * 0.45f, maxVoxelZ, -shipBottomYOffset + ShipCollisionClearance, ref requiredEyeY);
-            foundSupport |= TryAccumulateVoxelTerrainFollowSupport(shipRight, ShipCollisionHalfWidth * 0.45f, maxVoxelZ, -shipBottomYOffset + ShipCollisionClearance, ref requiredEyeY);
-            return foundSupport;
-        }
-
-        private bool TryAccumulateVoxelTerrainFollowSupport(Vector2 position, float horizontalExtent, int maxVoxelZ, float requiredOffsetY, ref float requiredEyeY)
-        {
-            var supportTopY = GetVoxelSupportTopY(position, horizontalExtent, maxVoxelZ);
-            if (supportTopY == float.MinValue)
-            {
-                return false;
-            }
-
-            requiredEyeY = MathF.Max(requiredEyeY, supportTopY + requiredOffsetY);
-            return true;
-        }
-
-        private bool HasVoxelFlightClearance(Vector2 position, Vector3 lookDirection, float flightAltitude)
-        {
-            if (_voxelWorld == null || _worldMap == null)
-            {
-                return true;
-            }
-
-            var eyeWorldY = ConvertFlightAltitudeToEyeY(flightAltitude);
-            var cameraMin = new Vector3(position.X - CameraCollisionExtent, position.Y - CameraCollisionExtent, ConvertWorldYToVoxelZ(eyeWorldY - CameraCollisionEyeClearance));
-            var cameraMax = new Vector3(position.X + CameraCollisionExtent, position.Y + CameraCollisionExtent, ConvertWorldYToVoxelZ(eyeWorldY + CameraCollisionEyeClearance));
-            if (_voxelWorld.HasAnySolidInBox(cameraMin, cameraMax))
-            {
-                return false;
-            }
-
-            var horizontalForward = new Vector2(lookDirection.X, lookDirection.Z);
-            if (horizontalForward.LengthSquared() < 0.0001f)
-            {
-                horizontalForward = new Vector2(MathF.Cos(_flightHeading), MathF.Sin(_flightHeading));
-            }
-            else
-            {
-                horizontalForward.Normalize();
-            }
-
-            var horizontalRight = new Vector2(-horizontalForward.Y, horizontalForward.X);
-            var shipCenter = _worldMap.WrapPosition(position + (horizontalForward * ShipCollisionForwardOffset));
-            var shipNose = _worldMap.WrapPosition(position + (horizontalForward * ShipCollisionNoseOffset));
-            var shipLeft = _worldMap.WrapPosition(shipCenter - (horizontalRight * ShipCollisionHalfWidth));
-            var shipRight = _worldMap.WrapPosition(shipCenter + (horizontalRight * ShipCollisionHalfWidth));
-            var shipCenterWorldY = eyeWorldY + GetShipCenterYOffset(lookDirection);
-            var shipBottomExtent = _payloadReleased ? ShipCollisionBottomExtent : PayloadCollisionBottomExtent;
-            if (!HasVoxelSupportPointClearance(shipCenter, shipCenterWorldY, shipBottomExtent, ShipCollisionHalfWidth))
-            {
-                return false;
-            }
-
-            if (!HasVoxelSupportPointClearance(shipNose, shipCenterWorldY, ShipCollisionBottomExtent, ShipCollisionHalfWidth * 0.8f))
-            {
-                return false;
-            }
-
-            if (!HasVoxelSupportPointClearance(shipLeft, shipCenterWorldY, ShipCollisionBottomExtent, ShipCollisionHalfWidth * 0.45f))
-            {
-                return false;
-            }
-
-            return HasVoxelSupportPointClearance(shipRight, shipCenterWorldY, ShipCollisionBottomExtent, ShipCollisionHalfWidth * 0.45f);
-        }
-
-        private bool HasVoxelSupportPointClearance(Vector2 position, float centerWorldY, float bottomExtent, float horizontalExtent)
-        {
-            var minWorldY = centerWorldY - bottomExtent - ShipCollisionClearance;
-            var maxWorldY = centerWorldY + ShipCollisionClearance;
-            var minVoxel = new Vector3(position.X - horizontalExtent, position.Y - horizontalExtent, ConvertWorldYToVoxelZ(minWorldY));
-            var maxVoxel = new Vector3(position.X + horizontalExtent, position.Y + horizontalExtent, ConvertWorldYToVoxelZ(maxWorldY));
-            return !_voxelWorld.HasAnySolidInBox(minVoxel, maxVoxel);
-        }
-
-        private static float ConvertWorldYToVoxelZ(float worldY)
-        {
-            var renderVerticalOrigin = VoxelWorldBuilder.GetRenderVerticalOrigin();
-            return ((worldY - RenderFaceOverlap) / RenderCubeHeight) + renderVerticalOrigin;
         }
 
         private static float ConvertEyeYToFlightAltitude(float eyeY)
@@ -1363,8 +1246,9 @@ namespace PETAR_PlanetExplorer
             _heightMapTexture = null;
             _horizontalViewRenderer?.Dispose();
             _horizontalViewRenderer = null;
-            ResetVoxelStreamingState();
             _horizontalViewRenderSize = Point.Zero;
+            _useVoxelHorizontalRenderer = false;
+            _activeVehicleMode = ActiveVehicleMode.Ship;
             _mouseLookInitialized = false;
             _worldMap = null;
             var generationSettings = _generationSettings.WithSeed(worldSeed);
@@ -1401,40 +1285,47 @@ namespace PETAR_PlanetExplorer
 
             _horizontalViewRenderer?.Dispose();
             _horizontalViewRenderer = null;
-            ResetVoxelStreamingState();
             _horizontalViewRenderSize = Point.Zero;
 
             _flightPosition = new Vector2(_worldMap.Width * 0.35f, _worldMap.Height * 0.28f);
             _flightHeading = MathF.PI * 0.5f;
             _flightPitch = 0f;
+            _activeVehicleMode = ActiveVehicleMode.Ship;
             _payloadReleased = false;
             _fallingPayloadActive = false;
             _oilPlatforms.Clear();
             _activeMissile = null;
             _missileDebris.Clear();
+            InitializeTruckState();
             _flightAltitude = _terrainFollowMode ? GetTerrainFollowAltitude(_flightPosition, GetLookDirection()) : 3000f;
-            _worldGenerationProgress = 1f;
+            _worldGenerationProgress = 0f;
             _worldGenerationStatus = "World ready";
             _worldGenerationTask = null;
 
             DebugLogger.Info($"Generated procedural world map {_worldMap.Width}x{_worldMap.Height} using seed {_worldMap.Seed}.");
         }
 
+        private void EnsureVoxelRenderer()
+        {
+            if (_voxelRenderer != null)
+            {
+                return;
+            }
+
+            _voxelRenderer = new VoxelPrototypeRenderer(GraphicsDevice);
+            if (_worldMap != null)
+            {
+                var altitudeRatio = MathHelper.Clamp((_flightAltitude - FlightAltitudeMinimum) / (MaxFlightAltitude - FlightAltitudeMinimum), 0f, 1f);
+                var cameraEyeY = MathHelper.Lerp(RenderCameraMinEyeY, RenderCameraMaxEyeY, altitudeRatio);
+                var cameraPosition = new Vector3(_flightPosition.X, cameraEyeY, _flightPosition.Y);
+                _voxelRenderer.RebuildWorld(_worldMap.Seed, cameraPosition);
+            }
+        }
+
         private void UpdateWorldGenerationProgress(float progress, string status)
         {
             _worldGenerationProgress = MathHelper.Clamp(progress, 0f, 1f);
             _worldGenerationStatus = status;
-        }
-
-        private void ResetVoxelStreamingState()
-        {
-            _voxelWorld = null;
-            _voxelWorldBuildTask = null;
-            _pendingVoxelRegions.Clear();
-            _queuedVoxelRegions.Clear();
-            _loadedVoxelRegions.Clear();
-            _voxelBuildRequestId++;
-            _voxelBuildStatus = "Voxel world idle";
         }
 
         private void DrawOilPlatformMarkers(Rectangle minimapRectangle)
@@ -1452,6 +1343,30 @@ namespace PETAR_PlanetExplorer
                 _spriteBatch.Draw(_pixel, new Rectangle(markerX - halfSize, markerY - halfSize, markerSize, markerSize), markerColor);
                 _spriteBatch.Draw(_pixel, new Rectangle(markerX - markerSize, markerY, markerSize * 2, 1), markerColor * 0.8f);
                 _spriteBatch.Draw(_pixel, new Rectangle(markerX, markerY - markerSize, 1, markerSize * 2), markerColor * 0.8f);
+            }
+        }
+
+        private void DrawDevelopmentSiteMarkers(Rectangle minimapRectangle)
+        {
+            if (_worldMap == null)
+            {
+                return;
+            }
+
+            IReadOnlyList<Vector2> developmentSites = _worldMap.GetDevelopmentSiteCenters();
+            for (var index = 0; index < developmentSites.Count; index++)
+            {
+                var site = developmentSites[index];
+                var pulse = 0.5f + (MathF.Sin((_worldTime * 3.2f) + (index * 0.7f)) * 0.5f);
+                var markerColor = Color.Lerp(new Color(80, 220, 255), new Color(255, 255, 255), pulse);
+                var markerX = minimapRectangle.X + (int)((site.X / _worldMap.Width) * minimapRectangle.Width);
+                var markerY = minimapRectangle.Y + (int)((site.Y / _worldMap.Height) * minimapRectangle.Height);
+                var markerSize = 6 + (int)MathF.Round(pulse * 4f);
+                var halfSize = markerSize / 2;
+
+                _spriteBatch.Draw(_pixel, new Rectangle(markerX - halfSize, markerY - halfSize, markerSize, markerSize), markerColor * 0.75f);
+                _spriteBatch.Draw(_pixel, new Rectangle(markerX - markerSize - 2, markerY - 1, (markerSize * 2) + 4, 3), markerColor);
+                _spriteBatch.Draw(_pixel, new Rectangle(markerX - 1, markerY - markerSize - 2, 3, (markerSize * 2) + 4), markerColor);
             }
         }
 
@@ -1476,7 +1391,13 @@ namespace PETAR_PlanetExplorer
 
         private readonly record struct MissileState(Vector2 Position, float WorldY, Vector3 Direction, float TraveledDistance, float ExplosionRadius);
 
-        private readonly record struct VoxelRegionKey(int X, int Y);
+        private enum ActiveVehicleMode
+        {
+            Ship,
+            Truck
+        }
+
+        private readonly record struct TruckState(Vector2 Position, float Heading, float WorldY, float Speed, float WheelRotation, float Pitch);
 
     }
 }

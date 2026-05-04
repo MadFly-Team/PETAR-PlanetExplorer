@@ -46,6 +46,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                     preset.CraterIntensity,
                     preset.GorgeIntensity,
                     preset.MaxCubeColumn,
+                    preset.TownDensity,
                     preset.TreeCount);
                 terrainEditSlot = Math.Max(0, preset.TerrainEditSlot);
                 return true;
@@ -80,6 +81,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                 CraterIntensity = settings.CraterIntensity,
                 GorgeIntensity = settings.GorgeIntensity,
                 MaxCubeColumn = settings.MaxCubeColumn,
+                TownDensity = settings.TownDensity,
                 TreeCount = settings.TreeCount,
                 TerrainEditSlot = Math.Max(0, terrainEditSlot)
             };
@@ -104,6 +106,8 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             public float GorgeIntensity { get; set; }
 
             public int MaxCubeColumn { get; set; }
+
+            public int TownDensity { get; set; } = WorldGenerationSettings.DefaultTownDensity;
 
             public int TreeCount { get; set; }
 

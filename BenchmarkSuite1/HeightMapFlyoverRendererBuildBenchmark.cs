@@ -24,6 +24,7 @@ namespace PETAR_PlanetExplorer.Performance
         private float _maxDistance;
         private float _viewWidth;
         private float _time;
+        private float _downwardViewT;
         [GlobalSetup]
         public void Setup()
         {
@@ -38,12 +39,13 @@ namespace PETAR_PlanetExplorer.Performance
             _maxDistance = MathHelper.Lerp(180f, 360f, altitudeRatio);
             _viewWidth = MathHelper.Lerp(144f, 320f, altitudeRatio);
             _time = 120f;
+            _downwardViewT = 0f;
         }
 
         [Benchmark]
         public int BuildVisibleChunks()
         {
-            return (int)_buildVisibleChunksMethod.Invoke(_renderer, new object[] { _worldMap, _cameraPosition, _forward, _right, _maxDistance, _viewWidth, _time })!;
+            return (int)_buildVisibleChunksMethod.Invoke(_renderer, new object[] { _worldMap, _cameraPosition, _forward, _right, _maxDistance, _viewWidth, _time, _downwardViewT })!;
         }
 
         private HeightMapFlyoverRenderer CreateHeadlessRenderer(int worldWidth, int worldHeight)
@@ -87,6 +89,7 @@ namespace PETAR_PlanetExplorer.Performance
         private float _viewWidth;
         private float _cachedTime;
         private float _cacheMissTime;
+        private float _downwardViewT;
 
         [GlobalSetup]
         public void Setup()
@@ -103,6 +106,7 @@ namespace PETAR_PlanetExplorer.Performance
             _viewWidth = MathHelper.Lerp(144f, 320f, altitudeRatio);
             _cachedTime = 120f;
             _cacheMissTime = 120.06f;
+            _downwardViewT = 0f;
         }
 
         [IterationSetup]
@@ -119,7 +123,7 @@ namespace PETAR_PlanetExplorer.Performance
 
         private int InvokeBuildVisibleChunks(float time)
         {
-            return (int)_buildVisibleChunksMethod.Invoke(_renderer, new object[] { _worldMap, _cameraPosition, _forward, _right, _maxDistance, _viewWidth, time })!;
+            return (int)_buildVisibleChunksMethod.Invoke(_renderer, new object[] { _worldMap, _cameraPosition, _forward, _right, _maxDistance, _viewWidth, time, _downwardViewT })!;
         }
 
         private HeightMapFlyoverRenderer CreateHeadlessRenderer(int worldWidth, int worldHeight)
@@ -163,6 +167,7 @@ namespace PETAR_PlanetExplorer.Performance
         private float _viewWidth;
         private float _cachedTime;
         private float _cacheMissTime;
+        private float _downwardViewT;
 
         [GlobalSetup]
         public void Setup()
@@ -179,6 +184,7 @@ namespace PETAR_PlanetExplorer.Performance
             _viewWidth = MathHelper.Lerp(144f, 320f, altitudeRatio);
             _cachedTime = 120f;
             _cacheMissTime = 120.06f;
+            _downwardViewT = 0f;
         }
 
         [IterationSetup]
@@ -195,7 +201,7 @@ namespace PETAR_PlanetExplorer.Performance
 
         private int InvokeBuildVisibleChunks(float time)
         {
-            return (int)_buildVisibleChunksMethod.Invoke(_renderer, new object[] { _worldMap, _cameraPosition, _forward, _right, _maxDistance, _viewWidth, time })!;
+            return (int)_buildVisibleChunksMethod.Invoke(_renderer, new object[] { _worldMap, _cameraPosition, _forward, _right, _maxDistance, _viewWidth, time, _downwardViewT })!;
         }
 
         private HeightMapFlyoverRenderer CreateHeadlessRenderer(int worldWidth, int worldHeight)

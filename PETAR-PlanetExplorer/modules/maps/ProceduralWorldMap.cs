@@ -14,11 +14,36 @@ namespace PETAR_PlanetExplorer.Modules.Maps
         private const float TreeMaxHeight = 35f / 63f;
         private const float SnowStartHeight = 58f / 63f;
         private const int TreeChunkSize = 16;
+        private const byte FeatureNone = 0;
+        private const byte FeatureDevelopment = 1;
+        private const byte FeatureDevelopmentRoad = 2;
+        private const byte FeatureDevelopmentRoadCenter = 3;
+        private const byte FeatureTown = 4;
+        private const byte FeatureTownRoad = 5;
+        private const byte FeatureTownRoadCenter = 6;
+        private const int DevelopmentMinSize = 30;
+        private const int DevelopmentMaxSize = 50;
+        private const int DevelopmentMinRoads = 2;
+        private const int DevelopmentMaxRoads = 4;
+        private const int DevelopmentRoadWidth = 4;
+        private const int DevelopmentRoadBoundaryRoundaboutRadius = 5;
+        private const int RoadsidePlotSize = 20;
+        private const int TownMinSize = 20;
+        private const int TownMaxSize = 50;
+        private const int TownRoadConnectionCount = 2;
+        private const int TownDevelopmentExclusionRadius = 20;
+        private const int DevelopmentPadSlopeRadius = 8;
+        private const int DevelopmentRoadSlopeRadius = 6;
 
         private readonly float[] _heightData;
         private readonly bool[] _riverData;
+        private readonly byte[] _featureData;
         private readonly WorldGenerationSettings _settings;
         private Dictionary<int, TreeInstance[]> _treesByChunk;
+        private Dictionary<int, TownDefenseSite[]> _townDefenseSitesByChunk;
+        private List<Vector2> _developmentSiteCenters;
+        private List<Rectangle> _developmentSiteBounds;
+        private List<Rectangle> _townBounds;
 
         public ProceduralWorldMap(int width, int height, int seed, Action<float, string> progressCallback = null)
             : this(width, height, seed, WorldGenerationSettings.Default, progressCallback)
@@ -60,7 +85,12 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             TreeTargetCount = Theme.HasTrees ? Math.Max(0, _settings.TreeCount) : 0;
             _heightData = new float[width * height];
             _riverData = new bool[width * height];
+            _featureData = new byte[width * height];
             _treesByChunk = new Dictionary<int, TreeInstance[]>();
+            _townDefenseSitesByChunk = new Dictionary<int, TownDefenseSite[]>();
+            _developmentSiteCenters = new List<Vector2>();
+            _developmentSiteBounds = new List<Rectangle>();
+            _townBounds = new List<Rectangle>();
 
             Generate(progressCallback);
         }
@@ -97,6 +127,26 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                 : Array.Empty<TreeInstance>();
         }
 
+        public IReadOnlyList<TownDefenseSite> GetTownDefenseSitesInChunk(int chunkStartX, int chunkStartY)
+        {
+            var wrappedChunkX = WrapGridCoordinate(chunkStartX, Width);
+            var wrappedChunkY = WrapGridCoordinate(chunkStartY, Height);
+            var chunkKey = GetIndex(wrappedChunkX, wrappedChunkY);
+            return _townDefenseSitesByChunk.TryGetValue(chunkKey, out var sites)
+                ? sites
+                : Array.Empty<TownDefenseSite>();
+        }
+
+        public IReadOnlyList<Vector2> GetDevelopmentSiteCenters()
+        {
+            return _developmentSiteCenters;
+        }
+
+        public IReadOnlyList<Rectangle> GetDevelopmentSiteBounds()
+        {
+            return _developmentSiteBounds;
+        }
+
         public Vector2 WrapPosition(Vector2 position)
         {
             return new Vector2(WrapCoordinate(position.X, Width), WrapCoordinate(position.Y, Height));
@@ -113,7 +163,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                 for (var x = 0; x < Width; x++)
                 {
                     var index = rowOffset + x;
-                    colors[index] = GetTerrainColor(_heightData[index], _riverData[index], Theme);
+                    colors[index] = GetTerrainColor(_heightData[index], _riverData[index], _featureData[index], Theme);
                 }
 
                 ReportPhaseProgress(progressCallback, 0.92f, 0.04f, Interlocked.Increment(ref rowsCompleted), Height, "Coloring terrain");
@@ -149,7 +199,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
 
         public Color GetColorForHeight(float height, bool isRiver)
         {
-            return GetTerrainColor(height, isRiver, Theme);
+            return GetTerrainColor(height, isRiver, FeatureNone, Theme);
         }
 
         public bool SampleRiver(float x, float y)
@@ -186,7 +236,9 @@ namespace PETAR_PlanetExplorer.Modules.Maps
         public Color SampleSurfaceColor(float x, float y)
         {
             var river = IsRiver((int)MathF.Round(x), (int)MathF.Round(y));
-            return GetTerrainColor(SampleHeight(x, y), river, Theme);
+            var wrappedX = WrapGridCoordinate((int)MathF.Floor(x), Width);
+            var wrappedY = WrapGridCoordinate((int)MathF.Floor(y), Height);
+            return GetTerrainColor(SampleHeight(x, y), river, _featureData[GetIndex(wrappedX, wrappedY)], Theme);
         }
 
         public int DestroyTerrainSphere(Vector2 center, float centerWorldY, float radius, int protectedColumnHeight)
@@ -295,8 +347,717 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             {
                 CarveRivers(progressCallback);
             }
+
+            GenerateDevelopmentSites(progressCallback);
+            GenerateDistributedTownNetwork(progressCallback);
+            BuildTownDefenseSites();
             GenerateTrees(progressCallback);
             progressCallback?.Invoke(0.92f, "Terrain ready");
+        }
+
+        private void BuildTownDefenseSites()
+        {
+            _townDefenseSitesByChunk.Clear();
+            var visited = new bool[_featureData.Length];
+            var chunkSites = new Dictionary<int, List<TownDefenseSite>>();
+            var floodQueue = new Queue<Point>();
+
+            for (var y = 0; y < Height; y++)
+            {
+                for (var x = 0; x < Width; x++)
+                {
+                    var startIndex = GetIndex(x, y);
+                    if (visited[startIndex] || _featureData[startIndex] != FeatureTown)
+                    {
+                        continue;
+                    }
+
+                    visited[startIndex] = true;
+                    floodQueue.Enqueue(new Point(x, y));
+
+                    var minX = x;
+                    var maxX = x;
+                    var minY = y;
+                    var maxY = y;
+                    var cellCount = 0;
+
+                    while (floodQueue.Count > 0)
+                    {
+                        var point = floodQueue.Dequeue();
+                        cellCount++;
+                        minX = Math.Min(minX, point.X);
+                        maxX = Math.Max(maxX, point.X);
+                        minY = Math.Min(minY, point.Y);
+                        maxY = Math.Max(maxY, point.Y);
+
+                        TryVisitTownNeighbor(point.X - 1, point.Y, visited, floodQueue);
+                        TryVisitTownNeighbor(point.X + 1, point.Y, visited, floodQueue);
+                        TryVisitTownNeighbor(point.X, point.Y - 1, visited, floodQueue);
+                        TryVisitTownNeighbor(point.X, point.Y + 1, visited, floodQueue);
+                    }
+
+                    if (cellCount < 64)
+                    {
+                        continue;
+                    }
+
+                    var centerX = (minX + maxX + 1) * 0.5f;
+                    var centerY = (minY + maxY + 1) * 0.5f;
+                    AddTownDefenseSite(chunkSites, centerX, minY + 0.5f, new Vector2(0f, -1f));
+                    AddTownDefenseSite(chunkSites, maxX + 0.5f, centerY, new Vector2(1f, 0f));
+                    AddTownDefenseSite(chunkSites, centerX, maxY + 0.5f, new Vector2(0f, 1f));
+                    AddTownDefenseSite(chunkSites, minX + 0.5f, centerY, new Vector2(-1f, 0f));
+                }
+            }
+
+            foreach (var chunkSite in chunkSites)
+            {
+                _townDefenseSitesByChunk[chunkSite.Key] = chunkSite.Value.ToArray();
+            }
+        }
+
+        private void TryVisitTownNeighbor(int x, int y, bool[] visited, Queue<Point> floodQueue)
+        {
+            if (x < 0 || x >= Width || y < 0 || y >= Height)
+            {
+                return;
+            }
+
+            var index = GetIndex(x, y);
+            if (visited[index] || _featureData[index] != FeatureTown)
+            {
+                return;
+            }
+
+            visited[index] = true;
+            floodQueue.Enqueue(new Point(x, y));
+        }
+
+        private void AddTownDefenseSite(Dictionary<int, List<TownDefenseSite>> chunkSites, float x, float y, Vector2 facingDirection)
+        {
+            var wrappedX = WrapCoordinate(x, Width);
+            var wrappedY = WrapCoordinate(y, Height);
+            var sampleX = WrapGridCoordinate((int)MathF.Floor(wrappedX), Width);
+            var sampleY = WrapGridCoordinate((int)MathF.Floor(wrappedY), Height);
+            var chunkX = (sampleX / TreeChunkSize) * TreeChunkSize;
+            var chunkY = (sampleY / TreeChunkSize) * TreeChunkSize;
+            var chunkKey = GetIndex(chunkX, chunkY);
+            if (!chunkSites.TryGetValue(chunkKey, out var sites))
+            {
+                sites = new List<TownDefenseSite>();
+                chunkSites[chunkKey] = sites;
+            }
+
+            sites.Add(new TownDefenseSite(new Vector2(wrappedX, wrappedY), _heightData[GetIndex(sampleX, sampleY)], facingDirection));
+        }
+
+        private void GenerateDistributedTownNetwork(Action<float, string> progressCallback)
+        {
+            _townBounds.Clear();
+            var densityRatio = (_settings.TownDensity - WorldGenerationSettings.MinimumTownDensity) /
+                (float)(WorldGenerationSettings.MaximumTownDensity - WorldGenerationSettings.MinimumTownDensity);
+            var targetTownCount = (int)MathF.Round(MathHelper.Lerp(0f, 140f, densityRatio));
+            if (targetTownCount <= 0)
+            {
+                ReportPhaseProgress(progressCallback, 0.89f, 0.02f, 1, 1, "Laying out towns and roads");
+                return;
+            }
+
+            var roadSeed = new Random(Seed ^ unchecked((int)0x2b53aee1));
+            var targetHeight = Math.Clamp((int)MathF.Round((SeaLevel * (MaxCubeColumn - 1)) + 3f), 1, MaxCubeColumn - 1) / (float)(MaxCubeColumn - 1);
+            var townsPlaced = 0;
+            var attempts = Math.Max(targetTownCount * 4, 64);
+
+            for (var attempt = 0; attempt < attempts && townsPlaced < targetTownCount; attempt++)
+            {
+                var width = roadSeed.Next(TownMinSize, TownMaxSize + 1);
+                var height = roadSeed.Next(TownMinSize, TownMaxSize + 1);
+                var centerX = roadSeed.Next(width + 8, Width - width - 8);
+                var centerY = roadSeed.Next(height + 8, Height - height - 8);
+                var bounds = new Rectangle(centerX - (width / 2), centerY - (height / 2), width, height);
+                if (!IsTownAreaAvailable(bounds))
+                {
+                    continue;
+                }
+
+                FlattenTownPad(bounds, targetHeight);
+                _townBounds.Add(bounds);
+                townsPlaced++;
+            }
+
+            GenerateTownConnections(targetHeight, roadSeed);
+
+            ReportPhaseProgress(progressCallback, 0.89f, 0.02f, townsPlaced, Math.Max(1, targetTownCount), "Laying out towns and roads");
+        }
+
+        private void GenerateDevelopmentSites(Action<float, string> progressCallback)
+        {
+            if (Width < 96 || Height < 96)
+            {
+                return;
+            }
+
+            _developmentSiteCenters.Clear();
+            _developmentSiteBounds.Clear();
+
+            var random = new Random(Seed ^ unchecked((int)0x45c3d2e1));
+            var targetHeight = Math.Clamp((int)MathF.Round((SeaLevel * (MaxCubeColumn - 1)) + 3f), 1, MaxCubeColumn - 1) / (float)(MaxCubeColumn - 1);
+            var siteCount = 1 + (random.NextDouble() < 0.55d ? 1 : 0) + (random.NextDouble() < 0.2d ? 1 : 0);
+            var sitesPlaced = 0;
+            var minSpacing = DevelopmentMaxSize + 24;
+            var placedSites = new List<Rectangle>();
+            var centerMinX = Math.Max(DevelopmentMaxSize, (int)(Width * 0.24f));
+            var centerMaxX = Math.Min(Width - DevelopmentMaxSize - 1, (int)(Width * 0.76f));
+            var centerMinY = Math.Max(DevelopmentMaxSize, (int)(Height * 0.24f));
+            var centerMaxY = Math.Min(Height - DevelopmentMaxSize - 1, (int)(Height * 0.76f));
+            var maxAttempts = 24;
+
+            for (var attempt = 0; attempt < maxAttempts && sitesPlaced < siteCount; attempt++)
+            {
+                var padWidth = random.Next(DevelopmentMinSize, DevelopmentMaxSize + 1);
+                var padHeight = random.Next(DevelopmentMinSize, DevelopmentMaxSize + 1);
+                var centerX = random.Next(centerMinX, centerMaxX + 1);
+                var centerY = random.Next(centerMinY, centerMaxY + 1);
+                var startX = centerX - (padWidth / 2);
+                var startY = centerY - (padHeight / 2);
+                var bounds = new Rectangle(startX, startY, padWidth, padHeight);
+
+                if (bounds.Left < 6 || bounds.Top < 6 || bounds.Right >= Width - 6 || bounds.Bottom >= Height - 6)
+                {
+                    continue;
+                }
+
+                var overlaps = false;
+                for (var index = 0; index < placedSites.Count; index++)
+                {
+                    var expanded = ExpandRectangle(placedSites[index], minSpacing);
+                    if (expanded.Intersects(bounds))
+                    {
+                        overlaps = true;
+                        break;
+                    }
+                }
+
+                if (overlaps)
+                {
+                    continue;
+                }
+
+                FlattenDevelopmentPad(bounds, targetHeight);
+                GenerateDevelopmentRoads(bounds, targetHeight, random, isTownRoad: false);
+                placedSites.Add(bounds);
+                _developmentSiteBounds.Add(bounds);
+                _developmentSiteCenters.Add(new Vector2(bounds.Left + (bounds.Width * 0.5f), bounds.Top + (bounds.Height * 0.5f)));
+                sitesPlaced++;
+            }
+
+            ReportPhaseProgress(progressCallback, 0.87f, 0.03f, sitesPlaced, Math.Max(1, siteCount), "Placing development sites");
+        }
+
+        private void FlattenTownPad(Rectangle bounds, float targetHeight)
+        {
+            var outerBounds = ExpandRectangle(bounds, DevelopmentPadSlopeRadius);
+            var innerLeft = bounds.Left;
+            var innerTop = bounds.Top;
+            var innerRight = bounds.Right - 1;
+            var innerBottom = bounds.Bottom - 1;
+
+            for (var y = Math.Max(0, outerBounds.Top); y < Math.Min(Height, outerBounds.Bottom); y++)
+            {
+                for (var x = Math.Max(0, outerBounds.Left); x < Math.Min(Width, outerBounds.Right); x++)
+                {
+                    var index = GetIndex(x, y);
+                    var distanceX = DistanceOutsideRange(x, innerLeft, innerRight);
+                    var distanceY = DistanceOutsideRange(y, innerTop, innerBottom);
+                    var edgeDistance = MathF.Sqrt((distanceX * distanceX) + (distanceY * distanceY));
+                    if (edgeDistance > DevelopmentPadSlopeRadius)
+                    {
+                        continue;
+                    }
+
+                    var blend = edgeDistance <= 0f ? 1f : 1f - MathHelper.Clamp(edgeDistance / DevelopmentPadSlopeRadius, 0f, 1f);
+                    _heightData[index] = MathHelper.Lerp(_heightData[index], targetHeight, blend);
+                    _riverData[index] = false;
+                    if (edgeDistance <= 0f)
+                    {
+                        _featureData[index] = FeatureTown;
+                    }
+                }
+            }
+        }
+
+        private void GenerateDevelopmentRoads(Rectangle bounds, float targetHeight, Random random, bool isTownRoad)
+        {
+            var roadCount = random.Next(DevelopmentMinRoads, DevelopmentMaxRoads + 1);
+            var usedDirections = new HashSet<int>();
+
+            for (var roadIndex = 0; roadIndex < roadCount; roadIndex++)
+            {
+                var baseDirection = random.Next(4);
+                var direction = baseDirection;
+                for (var attempts = 0; attempts < 4 && !usedDirections.Add(direction); attempts++)
+                {
+                    direction = (baseDirection + attempts + 1) & 3;
+                }
+
+                var start = GetRoadStart(bounds, direction, random);
+                var current = start;
+                var directionVector = GetDirectionVector(direction);
+                var nextTurnDistance = isTownRoad ? random.Next(6, 12) : int.MaxValue;
+                var nextPlotDistance = random.Next(18, 36);
+                var steps = 0;
+                var maxSteps = Width + Height;
+                Point? boundaryRoundaboutCenter = null;
+
+                while (steps < maxSteps && IsInsideMap(current))
+                {
+                    if (isTownRoad && IsNearDevelopmentAreaOrRoad(current, TownDevelopmentExclusionRadius))
+                    {
+                        break;
+                    }
+
+                    CarveRoadCell(current.X, current.Y, targetHeight, direction, isTownRoad);
+                    steps++;
+
+                    if (isTownRoad)
+                    {
+                        nextTurnDistance--;
+                        if (nextTurnDistance <= 0)
+                        {
+                            var turn = random.NextDouble() < 0.5d ? -1 : 1;
+                            direction = (direction + turn + 4) & 3;
+                            directionVector = GetDirectionVector(direction);
+                            nextTurnDistance = random.Next(5, 11);
+                        }
+                    }
+
+                    if (!isTownRoad)
+                    {
+                        nextPlotDistance--;
+                        if (nextPlotDistance <= 0)
+                        {
+                            TryCreateRoadsidePlot(current, direction, targetHeight, random);
+                            nextPlotDistance = random.Next(22, 42);
+                        }
+                    }
+
+                    var next = current + directionVector;
+                    if (!IsInsideMap(next))
+                    {
+                        boundaryRoundaboutCenter = ClampRoundaboutCenter(current, direction);
+                        break;
+                    }
+
+                    current = next;
+                }
+
+                if (boundaryRoundaboutCenter.HasValue)
+                {
+                    CarveBoundaryRoundabout(boundaryRoundaboutCenter.Value, targetHeight, isTownRoad);
+                }
+            }
+        }
+
+        private void GenerateTownConnections(float targetHeight, Random random)
+        {
+            if (_townBounds.Count == 0)
+            {
+                return;
+            }
+
+            var usedConnections = new HashSet<long>();
+            for (var townIndex = 0; townIndex < _townBounds.Count; townIndex++)
+            {
+                var townCenter = GetBoundsCenter(_townBounds[townIndex]);
+                var connectionsCreated = 0;
+                var candidates = BuildTownConnectionCandidates(townIndex, townCenter);
+                for (var candidateIndex = 0; candidateIndex < candidates.Count && connectionsCreated < TownRoadConnectionCount; candidateIndex++)
+                {
+                    var candidate = candidates[candidateIndex];
+                    if (candidate.TargetTownIndex >= 0)
+                    {
+                        var connectionKey = GetTownConnectionKey(townIndex, candidate.TargetTownIndex);
+                        if (!usedConnections.Add(connectionKey))
+                        {
+                            continue;
+                        }
+                    }
+
+                    if (TryCarveTownConnection(_townBounds[townIndex], candidate.Target, targetHeight))
+                    {
+                        connectionsCreated++;
+                    }
+                }
+            }
+        }
+
+        private List<TownRoadConnectionCandidate> BuildTownConnectionCandidates(int townIndex, Point townCenter)
+        {
+            var candidates = new List<TownRoadConnectionCandidate>();
+            for (var otherTownIndex = 0; otherTownIndex < _townBounds.Count; otherTownIndex++)
+            {
+                if (otherTownIndex == townIndex)
+                {
+                    continue;
+                }
+
+                var otherCenter = GetBoundsCenter(_townBounds[otherTownIndex]);
+                var deltaX = otherCenter.X - townCenter.X;
+                var deltaY = otherCenter.Y - townCenter.Y;
+                var distanceSquared = (deltaX * deltaX) + (deltaY * deltaY);
+                candidates.Add(new TownRoadConnectionCandidate(otherTownIndex, otherCenter, distanceSquared));
+            }
+
+            candidates.Sort((left, right) => left.Score.CompareTo(right.Score));
+            var boundaryCandidates = new[]
+            {
+                new TownRoadConnectionCandidate(-1, new Point(townCenter.X, 1), townCenter.Y * townCenter.Y),
+                new TownRoadConnectionCandidate(-1, new Point(Width - 2, townCenter.Y), (Width - 1 - townCenter.X) * (Width - 1 - townCenter.X)),
+                new TownRoadConnectionCandidate(-1, new Point(townCenter.X, Height - 2), (Height - 1 - townCenter.Y) * (Height - 1 - townCenter.Y)),
+                new TownRoadConnectionCandidate(-1, new Point(1, townCenter.Y), townCenter.X * townCenter.X)
+            };
+            Array.Sort(boundaryCandidates, (left, right) => left.Score.CompareTo(right.Score));
+            candidates.AddRange(boundaryCandidates);
+            return candidates;
+        }
+
+        private bool TryCarveTownConnection(Rectangle bounds, Point target, float targetHeight)
+        {
+            var current = GetRoadStart(bounds, GetDirectionToward(bounds, target), new Random(Seed ^ (target.X * 397) ^ (target.Y * 7919)));
+            var maxSteps = Width + Height;
+            for (var steps = 0; steps < maxSteps; steps++)
+            {
+                if (!IsInsideMap(current) || IsNearDevelopmentAreaOrRoad(current, TownDevelopmentExclusionRadius))
+                {
+                    return false;
+                }
+
+                var direction = GetDirectionToward(current, target);
+                CarveRoadCell(current.X, current.Y, targetHeight, direction, isTownRoad: true);
+                if (Math.Abs(current.X - target.X) <= 1 && Math.Abs(current.Y - target.Y) <= 1)
+                {
+                    return true;
+                }
+
+                var deltaX = target.X - current.X;
+                var deltaY = target.Y - current.Y;
+                if (Math.Abs(deltaX) >= Math.Abs(deltaY))
+                {
+                    current.X += Math.Sign(deltaX);
+                }
+                else
+                {
+                    current.Y += Math.Sign(deltaY);
+                }
+            }
+
+            return false;
+        }
+
+        private static long GetTownConnectionKey(int firstTownIndex, int secondTownIndex)
+        {
+            var min = Math.Min(firstTownIndex, secondTownIndex);
+            var max = Math.Max(firstTownIndex, secondTownIndex);
+            return ((long)min << 32) | (uint)max;
+        }
+
+        private static Point GetBoundsCenter(Rectangle bounds)
+        {
+            return new Point(bounds.Left + (bounds.Width / 2), bounds.Top + (bounds.Height / 2));
+        }
+
+        private int GetDirectionToward(Rectangle bounds, Point target)
+        {
+            return GetDirectionToward(GetBoundsCenter(bounds), target);
+        }
+
+        private static int GetDirectionToward(Point start, Point target)
+        {
+            var deltaX = target.X - start.X;
+            var deltaY = target.Y - start.Y;
+            if (Math.Abs(deltaX) >= Math.Abs(deltaY))
+            {
+                return deltaX >= 0 ? 1 : 3;
+            }
+
+            return deltaY >= 0 ? 2 : 0;
+        }
+
+        private void TryCreateRoadsidePlot(Point roadPosition, int direction, float targetHeight, Random random)
+        {
+            var perpendicularDirection = random.NextDouble() < 0.5d ? -1 : 1;
+            var offset = (DevelopmentRoadWidth / 2) + (RoadsidePlotSize / 2) + 3;
+            var plotCenter = (direction & 1) == 0
+                ? new Point(roadPosition.X + (offset * perpendicularDirection), roadPosition.Y)
+                : new Point(roadPosition.X, roadPosition.Y + (offset * perpendicularDirection));
+            var bounds = new Rectangle(
+                plotCenter.X - (RoadsidePlotSize / 2),
+                plotCenter.Y - (RoadsidePlotSize / 2),
+                RoadsidePlotSize,
+                RoadsidePlotSize);
+
+            if (bounds.Left < 4 || bounds.Top < 4 || bounds.Right >= Width - 4 || bounds.Bottom >= Height - 4)
+            {
+                return;
+            }
+
+            if (!IsFeatureAreaAvailable(bounds, allowRoadOverlap: false))
+            {
+                return;
+            }
+
+            FlattenDevelopmentPad(bounds, targetHeight);
+        }
+
+        private Point GetRoadStart(Rectangle bounds, int direction, Random random)
+        {
+            return direction switch
+            {
+                0 => new Point(bounds.Left + (bounds.Width / 2) + random.Next(-(bounds.Width / 3), (bounds.Width / 3) + 1), bounds.Top - 1),
+                1 => new Point(bounds.Right, bounds.Top + (bounds.Height / 2) + random.Next(-(bounds.Height / 3), (bounds.Height / 3) + 1)),
+                2 => new Point(bounds.Left + (bounds.Width / 2) + random.Next(-(bounds.Width / 3), (bounds.Width / 3) + 1), bounds.Bottom),
+                _ => new Point(bounds.Left - 1, bounds.Top + (bounds.Height / 2) + random.Next(-(bounds.Height / 3), (bounds.Height / 3) + 1))
+            };
+        }
+
+        private static Point GetDirectionVector(int direction)
+        {
+            return direction switch
+            {
+                0 => new Point(0, -1),
+                1 => new Point(1, 0),
+                2 => new Point(0, 1),
+                _ => new Point(-1, 0)
+            };
+        }
+
+        private Point ClampRoundaboutCenter(Point roadEnd, int direction)
+        {
+            var offset = direction switch
+            {
+                0 => new Point(0, -DevelopmentRoadBoundaryRoundaboutRadius),
+                1 => new Point(DevelopmentRoadBoundaryRoundaboutRadius, 0),
+                2 => new Point(0, DevelopmentRoadBoundaryRoundaboutRadius),
+                _ => new Point(-DevelopmentRoadBoundaryRoundaboutRadius, 0)
+            };
+
+            return new Point(
+                Math.Clamp(roadEnd.X + offset.X, DevelopmentRoadBoundaryRoundaboutRadius + 1, Width - DevelopmentRoadBoundaryRoundaboutRadius - 2),
+                Math.Clamp(roadEnd.Y + offset.Y, DevelopmentRoadBoundaryRoundaboutRadius + 1, Height - DevelopmentRoadBoundaryRoundaboutRadius - 2));
+        }
+
+        private bool IsInsideMap(Point position)
+        {
+            return position.X >= 0 && position.X < Width && position.Y >= 0 && position.Y < Height;
+        }
+
+        private bool IsNearDevelopmentAreaOrRoad(Point position, int radius)
+        {
+            var minX = Math.Max(0, position.X - radius);
+            var maxX = Math.Min(Width - 1, position.X + radius);
+            var minY = Math.Max(0, position.Y - radius);
+            var maxY = Math.Min(Height - 1, position.Y + radius);
+            for (var y = minY; y <= maxY; y++)
+            {
+                for (var x = minX; x <= maxX; x++)
+                {
+                    var feature = _featureData[GetIndex(x, y)];
+                    if (feature == FeatureDevelopment ||
+                        feature == FeatureDevelopmentRoad ||
+                        feature == FeatureDevelopmentRoadCenter)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private void CarveBoundaryRoundabout(Point center, float targetHeight, bool isTownRoad)
+        {
+            var radius = DevelopmentRoadBoundaryRoundaboutRadius;
+            var ringHalfWidth = DevelopmentRoadWidth * 0.5f;
+            for (var y = center.Y - radius - DevelopmentRoadSlopeRadius; y <= center.Y + radius + DevelopmentRoadSlopeRadius; y++)
+            {
+                for (var x = center.X - radius - DevelopmentRoadSlopeRadius; x <= center.X + radius + DevelopmentRoadSlopeRadius; x++)
+                {
+                    if (x < 0 || x >= Width || y < 0 || y >= Height)
+                    {
+                        continue;
+                    }
+
+                    var dx = x - center.X;
+                    var dy = y - center.Y;
+                    var radialDistance = MathF.Sqrt((dx * dx) + (dy * dy));
+                    var distanceFromRing = MathF.Abs(radialDistance - radius);
+                    if (distanceFromRing > ringHalfWidth + DevelopmentRoadSlopeRadius)
+                    {
+                        continue;
+                    }
+
+                    var blend = distanceFromRing <= ringHalfWidth
+                        ? 1f
+                        : 1f - MathHelper.Clamp((distanceFromRing - ringHalfWidth) / DevelopmentRoadSlopeRadius, 0f, 1f);
+                    var index = GetIndex(x, y);
+                    _heightData[index] = MathHelper.Lerp(_heightData[index], targetHeight, blend);
+                    _riverData[index] = false;
+                    if (distanceFromRing <= ringHalfWidth && _featureData[index] != FeatureDevelopment && _featureData[index] != FeatureTown)
+                    {
+                        _featureData[index] = distanceFromRing <= 1f
+                            ? (isTownRoad ? FeatureTownRoadCenter : FeatureDevelopmentRoadCenter)
+                            : (isTownRoad ? FeatureTownRoad : FeatureDevelopmentRoad);
+                    }
+                }
+            }
+        }
+
+        private void CarveRoadCell(int centerX, int centerY, float targetHeight, int direction, bool isTownRoad)
+        {
+            var lateralStart = -DevelopmentRoadWidth / 2;
+            var lateralEnd = lateralStart + DevelopmentRoadWidth - 1;
+            var alongAxisVertical = (direction & 1) == 0;
+
+            for (var lateral = lateralStart - DevelopmentRoadSlopeRadius; lateral <= lateralEnd + DevelopmentRoadSlopeRadius; lateral++)
+            {
+                var absoluteDistance = DistanceOutsideRange(lateral, lateralStart, lateralEnd);
+                if (absoluteDistance > DevelopmentRoadSlopeRadius)
+                {
+                    continue;
+                }
+
+                var blend = absoluteDistance <= 0f ? 1f : 1f - MathHelper.Clamp(absoluteDistance / (float)DevelopmentRoadSlopeRadius, 0f, 1f);
+                var x = alongAxisVertical ? centerX + lateral : centerX;
+                var y = alongAxisVertical ? centerY : centerY + lateral;
+                if (x < 0 || x >= Width || y < 0 || y >= Height)
+                {
+                    continue;
+                }
+
+                var index = GetIndex(x, y);
+                _heightData[index] = MathHelper.Lerp(_heightData[index], targetHeight, blend);
+                _riverData[index] = false;
+                if (absoluteDistance <= 0f &&
+                    _featureData[index] != FeatureDevelopment &&
+                    _featureData[index] != FeatureTown &&
+                    (!isTownRoad || (_featureData[index] != FeatureDevelopmentRoad && _featureData[index] != FeatureDevelopmentRoadCenter)))
+                {
+                    var isCenterStrip = lateral >= -1 && lateral <= 0;
+                    _featureData[index] = isCenterStrip
+                        ? (isTownRoad ? FeatureTownRoadCenter : FeatureDevelopmentRoadCenter)
+                        : (isTownRoad ? FeatureTownRoad : FeatureDevelopmentRoad);
+                }
+            }
+        }
+
+        private void FlattenDevelopmentPad(Rectangle bounds, float targetHeight)
+        {
+            var centerX = bounds.Left + (bounds.Width / 2f);
+            var centerY = bounds.Top + (bounds.Height / 2f);
+            var outerBounds = ExpandRectangle(bounds, DevelopmentPadSlopeRadius);
+            var innerLeft = bounds.Left;
+            var innerTop = bounds.Top;
+            var innerRight = bounds.Right - 1;
+            var innerBottom = bounds.Bottom - 1;
+
+            for (var y = Math.Max(0, outerBounds.Top); y < Math.Min(Height, outerBounds.Bottom); y++)
+            {
+                for (var x = Math.Max(0, outerBounds.Left); x < Math.Min(Width, outerBounds.Right); x++)
+                {
+                    var index = GetIndex(x, y);
+                    var distanceX = DistanceOutsideRange(x, innerLeft, innerRight);
+                    var distanceY = DistanceOutsideRange(y, innerTop, innerBottom);
+                    var edgeDistance = MathF.Sqrt((distanceX * distanceX) + (distanceY * distanceY));
+                    if (edgeDistance > DevelopmentPadSlopeRadius)
+                    {
+                        continue;
+                    }
+
+                    var blend = edgeDistance <= 0f ? 1f : 1f - MathHelper.Clamp(edgeDistance / DevelopmentPadSlopeRadius, 0f, 1f);
+                    _heightData[index] = MathHelper.Lerp(_heightData[index], targetHeight, blend);
+                    _riverData[index] = false;
+                    if (edgeDistance <= 0f)
+                    {
+                        _featureData[index] = FeatureDevelopment;
+                    }
+                }
+            }
+        }
+
+        private static Rectangle ExpandRectangle(Rectangle bounds, int amount)
+        {
+            return new Rectangle(bounds.X - amount, bounds.Y - amount, bounds.Width + (amount * 2), bounds.Height + (amount * 2));
+        }
+
+        private bool IsFeatureAreaAvailable(Rectangle bounds, bool allowRoadOverlap)
+        {
+            var occupiedCells = 0;
+            var sampledCells = 0;
+            for (var y = bounds.Top; y < bounds.Bottom; y += 2)
+            {
+                for (var x = bounds.Left; x < bounds.Right; x += 2)
+                {
+                    var feature = _featureData[GetIndex(x, y)];
+                    if (feature == FeatureDevelopment || (!allowRoadOverlap && feature != FeatureNone))
+                    {
+                        occupiedCells++;
+                    }
+
+                    sampledCells++;
+                }
+            }
+
+            return occupiedCells <= Math.Max(2, sampledCells / 12);
+        }
+
+        private bool IsTownAreaAvailable(Rectangle bounds)
+        {
+            if (!IsFeatureAreaAvailable(bounds, allowRoadOverlap: false))
+            {
+                return false;
+            }
+
+            for (var index = 0; index < _developmentSiteBounds.Count; index++)
+            {
+                if (ExpandRectangle(_developmentSiteBounds[index], TownDevelopmentExclusionRadius).Intersects(bounds))
+                {
+                    return false;
+                }
+            }
+
+            var exclusionBounds = ExpandRectangle(bounds, TownDevelopmentExclusionRadius);
+            for (var y = Math.Max(0, exclusionBounds.Top); y < Math.Min(Height, exclusionBounds.Bottom); y++)
+            {
+                for (var x = Math.Max(0, exclusionBounds.Left); x < Math.Min(Width, exclusionBounds.Right); x++)
+                {
+                    var feature = _featureData[GetIndex(x, y)];
+                    if (feature == FeatureDevelopment ||
+                        feature == FeatureDevelopmentRoad ||
+                        feature == FeatureDevelopmentRoadCenter ||
+                        feature == FeatureTownRoad ||
+                        feature == FeatureTownRoadCenter)
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        private static float DistanceOutsideRange(int value, int min, int max)
+        {
+            if (value < min)
+            {
+                return min - value;
+            }
+
+            if (value > max)
+            {
+                return value - max;
+            }
+
+            return 0f;
         }
 
         private void GenerateTrees(Action<float, string> progressCallback)
@@ -353,6 +1114,22 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             if (_riverData[index])
             {
                 return false;
+            }
+
+            if (_featureData[index] != FeatureNone)
+            {
+                return false;
+            }
+
+            for (var offsetY = -2; offsetY <= 2; offsetY++)
+            {
+                for (var offsetX = -2; offsetX <= 2; offsetX++)
+                {
+                    if (_featureData[GetWrappedIndex(x + offsetX, y + offsetY)] != FeatureNone)
+                    {
+                        return false;
+                    }
+                }
             }
 
             if (surfaceHeight < TreeMinHeight || surfaceHeight > TreeMaxHeight)
@@ -713,8 +1490,38 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             return wrapped < 0f ? wrapped + size : wrapped;
         }
 
-        private static Color GetTerrainColor(float height, bool isRiver, PlanetTheme theme)
+        private static Color GetTerrainColor(float height, bool isRiver, byte featureType, PlanetTheme theme)
         {
+            if (featureType == FeatureDevelopmentRoad)
+            {
+                return new Color(118, 126, 136);
+            }
+
+            if (featureType == FeatureDevelopmentRoadCenter)
+            {
+                return new Color(182, 188, 198);
+            }
+
+            if (featureType == FeatureDevelopment)
+            {
+                return new Color(72, 120, 214);
+            }
+
+            if (featureType == FeatureTown)
+            {
+                return new Color(146, 128, 96);
+            }
+
+            if (featureType == FeatureTownRoad)
+            {
+                return new Color(232, 198, 72);
+            }
+
+            if (featureType == FeatureTownRoadCenter)
+            {
+                return new Color(248, 238, 182);
+            }
+
             if (theme.HasSurfaceWater && isRiver && height >= SeaLevel - 0.02f)
             {
                 if (height < SeaLevel + 0.03f)
@@ -846,6 +1653,24 @@ namespace PETAR_PlanetExplorer.Modules.Maps
 
             public int FoliageTone { get; }
         }
+
+        public readonly struct TownDefenseSite
+        {
+            public TownDefenseSite(Vector2 position, float surfaceHeight, Vector2 facingDirection)
+            {
+                Position = position;
+                SurfaceHeight = surfaceHeight;
+                FacingDirection = facingDirection;
+            }
+
+            public Vector2 Position { get; }
+
+            public float SurfaceHeight { get; }
+
+            public Vector2 FacingDirection { get; }
+        }
+
+        private readonly record struct TownRoadConnectionCandidate(int TargetTownIndex, Point Target, int Score);
 
         public enum TreeCanopyShape
         {

@@ -12,5 +12,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PETAR-PlanetExplorer\PETAR-PlanetExplorer.csproj" />
+    <ProjectReference Include="..\VoxelPrototype.Core\VoxelPrototype.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="WormsTerrainDrawerBenchmarks.cs" />
+    <Compile Remove="WormsTerrainExplosionBenchmarks.cs" />
   </ItemGroup>
 </Project>

@@ -8,6 +8,9 @@ namespace PETAR_PlanetExplorer.Modules.Maps
         public const int MinimumMaxCubeColumn = 32;
         public const int MaximumMaxCubeColumn = 255;
         public const int DefaultMaxCubeColumn = 96;
+        public const int MinimumTownDensity = 0;
+        public const int MaximumTownDensity = 100;
+        public const int DefaultTownDensity = 40;
         public const float MinimumFeatureIntensity = 0f;
         public const float MaximumFeatureIntensity = 1f;
         public const int DefaultThemeIndex = 0;
@@ -21,6 +24,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             float craterIntensity,
             float gorgeIntensity,
             int maxCubeColumn,
+            int townDensity,
             int treeCount)
         {
             Seed = Math.Max(1, seed);
@@ -31,6 +35,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             CraterIntensity = ClampIntensity(craterIntensity);
             GorgeIntensity = ClampIntensity(gorgeIntensity);
             MaxCubeColumn = Math.Clamp(maxCubeColumn, MinimumMaxCubeColumn, MaximumMaxCubeColumn);
+            TownDensity = Math.Clamp(townDensity, MinimumTownDensity, MaximumTownDensity);
             TreeCount = Math.Max(0, treeCount);
         }
 
@@ -50,6 +55,8 @@ namespace PETAR_PlanetExplorer.Modules.Maps
 
         public int MaxCubeColumn { get; }
 
+        public int TownDensity { get; }
+
         public int TreeCount { get; }
 
         public static WorldGenerationSettings Default { get; } = new WorldGenerationSettings(
@@ -61,51 +68,57 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             craterIntensity: 0.35f,
             gorgeIntensity: 0.25f,
             maxCubeColumn: DefaultMaxCubeColumn,
+            townDensity: DefaultTownDensity,
             treeCount: ProceduralWorldMap.DefaultTreeCount);
 
         public WorldGenerationSettings WithSeed(int seed)
         {
-            return new WorldGenerationSettings(seed, Theme, MountainIntensity, PlateauIntensity, VolcanoIntensity, CraterIntensity, GorgeIntensity, MaxCubeColumn, TreeCount);
+            return new WorldGenerationSettings(seed, Theme, MountainIntensity, PlateauIntensity, VolcanoIntensity, CraterIntensity, GorgeIntensity, MaxCubeColumn, TownDensity, TreeCount);
         }
 
         public WorldGenerationSettings WithTheme(PlanetTheme theme)
         {
-            return new WorldGenerationSettings(Seed, theme, MountainIntensity, PlateauIntensity, VolcanoIntensity, CraterIntensity, GorgeIntensity, MaxCubeColumn, TreeCount);
+            return new WorldGenerationSettings(Seed, theme, MountainIntensity, PlateauIntensity, VolcanoIntensity, CraterIntensity, GorgeIntensity, MaxCubeColumn, TownDensity, TreeCount);
         }
 
         public WorldGenerationSettings WithMountainIntensity(float intensity)
         {
-            return new WorldGenerationSettings(Seed, Theme, intensity, PlateauIntensity, VolcanoIntensity, CraterIntensity, GorgeIntensity, MaxCubeColumn, TreeCount);
+            return new WorldGenerationSettings(Seed, Theme, intensity, PlateauIntensity, VolcanoIntensity, CraterIntensity, GorgeIntensity, MaxCubeColumn, TownDensity, TreeCount);
         }
 
         public WorldGenerationSettings WithPlateauIntensity(float intensity)
         {
-            return new WorldGenerationSettings(Seed, Theme, MountainIntensity, intensity, VolcanoIntensity, CraterIntensity, GorgeIntensity, MaxCubeColumn, TreeCount);
+            return new WorldGenerationSettings(Seed, Theme, MountainIntensity, intensity, VolcanoIntensity, CraterIntensity, GorgeIntensity, MaxCubeColumn, TownDensity, TreeCount);
         }
 
         public WorldGenerationSettings WithVolcanoIntensity(float intensity)
         {
-            return new WorldGenerationSettings(Seed, Theme, MountainIntensity, PlateauIntensity, intensity, CraterIntensity, GorgeIntensity, MaxCubeColumn, TreeCount);
+            return new WorldGenerationSettings(Seed, Theme, MountainIntensity, PlateauIntensity, intensity, CraterIntensity, GorgeIntensity, MaxCubeColumn, TownDensity, TreeCount);
         }
 
         public WorldGenerationSettings WithCraterIntensity(float intensity)
         {
-            return new WorldGenerationSettings(Seed, Theme, MountainIntensity, PlateauIntensity, VolcanoIntensity, intensity, GorgeIntensity, MaxCubeColumn, TreeCount);
+            return new WorldGenerationSettings(Seed, Theme, MountainIntensity, PlateauIntensity, VolcanoIntensity, intensity, GorgeIntensity, MaxCubeColumn, TownDensity, TreeCount);
         }
 
         public WorldGenerationSettings WithGorgeIntensity(float intensity)
         {
-            return new WorldGenerationSettings(Seed, Theme, MountainIntensity, PlateauIntensity, VolcanoIntensity, CraterIntensity, intensity, MaxCubeColumn, TreeCount);
+            return new WorldGenerationSettings(Seed, Theme, MountainIntensity, PlateauIntensity, VolcanoIntensity, CraterIntensity, intensity, MaxCubeColumn, TownDensity, TreeCount);
         }
 
         public WorldGenerationSettings WithMaxCubeColumn(int maxCubeColumn)
         {
-            return new WorldGenerationSettings(Seed, Theme, MountainIntensity, PlateauIntensity, VolcanoIntensity, CraterIntensity, GorgeIntensity, maxCubeColumn, TreeCount);
+            return new WorldGenerationSettings(Seed, Theme, MountainIntensity, PlateauIntensity, VolcanoIntensity, CraterIntensity, GorgeIntensity, maxCubeColumn, TownDensity, TreeCount);
+        }
+
+        public WorldGenerationSettings WithTownDensity(int townDensity)
+        {
+            return new WorldGenerationSettings(Seed, Theme, MountainIntensity, PlateauIntensity, VolcanoIntensity, CraterIntensity, GorgeIntensity, MaxCubeColumn, townDensity, TreeCount);
         }
 
         public WorldGenerationSettings WithTreeCount(int treeCount)
         {
-            return new WorldGenerationSettings(Seed, Theme, MountainIntensity, PlateauIntensity, VolcanoIntensity, CraterIntensity, GorgeIntensity, MaxCubeColumn, treeCount);
+            return new WorldGenerationSettings(Seed, Theme, MountainIntensity, PlateauIntensity, VolcanoIntensity, CraterIntensity, GorgeIntensity, MaxCubeColumn, TownDensity, treeCount);
         }
 
         private static float ClampIntensity(float intensity)

@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "we0jm3MSnTs=",
+  "dgSpecHash": "+ddHPsqBwq4=",
   "success": true,
-  "projectFilePath": "D:\\NewProjects\\Games\\PETAR-PlanetExplorer\\PETAR-PlanetExplorer\\PETAR-PlanetExplorer.csproj",
+  "projectFilePath": "D:\\NewProjects\\Games\\PETAR-PlanetExplorer\\Trunk\\PETAR-PlanetExplorer\\PETAR-PlanetExplorer.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\neilb\\.nuget\\packages\\monogame.content.builder.task\\3.8.4.1\\monogame.content.builder.task.3.8.4.1.nupkg.sha512",
     "C:\\Users\\neilb\\.nuget\\packages\\monogame.framework.desktopgl\\3.8.4.1\\monogame.framework.desktopgl.3.8.4.1.nupkg.sha512",

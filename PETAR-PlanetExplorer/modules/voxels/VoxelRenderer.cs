@@ -7,6 +7,13 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
 {
     public sealed class VoxelRenderer : IDisposable
     {
+        private const float HorizontalCubeSize = 1f;
+        private const float VerticalCubeSize = 2f;
+        private const float AmbientLight = 0.42f;
+        private const float DiffuseLight = 0.58f;
+        private static readonly int[] WarmupLodSteps = [1, 2, 4];
+        private static readonly Vector3 SunLightDirection = Vector3.Normalize(new Vector3(-0.52f, 0.74f, -0.42f));
+
         private readonly GraphicsDevice _graphicsDevice;
         private readonly BasicEffect _effect;
 
@@ -38,7 +45,7 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
             _effect.World = Matrix.Identity;
             _graphicsDevice.BlendState = BlendState.Opaque;
             _graphicsDevice.DepthStencilState = DepthStencilState.Default;
-            _graphicsDevice.RasterizerState = RasterizerState.CullCounterClockwise;
+            _graphicsDevice.RasterizerState = RasterizerState.CullNone;
 
             var frustum = new BoundingFrustum(view * projection);
             var maxViewDistance = GetMaxViewDistance(cameraPosition.Y);
@@ -61,11 +68,7 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
                 }
 
                 var lodStep = GetLodStep(distanceSquared);
-                if (!chunk.TryGetCachedMesh(lodStep, out var vertices) || chunk.IsDirty)
-                {
-                    vertices = VoxelMeshBuilder.BuildVertices(voxelWorld, chunk, lodStep);
-                    chunk.UpdateCachedMesh(lodStep, vertices);
-                }
+                var vertices = GetOrBuildChunkMesh(voxelWorld, chunk, lodStep);
 
                 if (vertices.Length == 0)
                 {
@@ -80,13 +83,54 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
             }
         }
 
+        internal static int WarmVisibleMeshCaches(VoxelWorld voxelWorld, Vector3 cameraPosition)
+        {
+            if (voxelWorld == null)
+            {
+                return 0;
+            }
+
+            var warmedMeshes = 0;
+            var maxViewDistance = GetMaxViewDistance(cameraPosition.Y) + (VoxelConstants.ChunkSize * HorizontalCubeSize * 2f);
+            var maxViewDistanceSquared = maxViewDistance * maxViewDistance;
+            foreach (var chunkEntry in voxelWorld.Chunks)
+            {
+                var chunk = chunkEntry.Value;
+                var chunkBounds = GetChunkBounds(chunk);
+                var chunkCenter = chunkBounds.Min + ((chunkBounds.Max - chunkBounds.Min) * 0.5f);
+                var distanceSquared = Vector3.DistanceSquared(cameraPosition, chunkCenter);
+                if (distanceSquared > maxViewDistanceSquared)
+                {
+                    continue;
+                }
+
+                for (var lodIndex = 0; lodIndex < WarmupLodSteps.Length; lodIndex++)
+                {
+                    var lodStep = WarmupLodSteps[lodIndex];
+                    if (chunk.TryGetCachedMesh(lodStep, out _) && !chunk.IsDirty)
+                    {
+                        continue;
+                    }
+
+                    GetOrBuildChunkMesh(voxelWorld, chunk, lodStep);
+                    warmedMeshes++;
+                }
+            }
+
+            return warmedMeshes;
+        }
+
         private static BoundingBox GetChunkBounds(VoxelChunk chunk)
         {
+            var halfExtents = new Vector3(HorizontalCubeSize * 0.5f, VerticalCubeSize * 0.5f, HorizontalCubeSize * 0.5f);
             var min = ToRenderPosition(
                 chunk.Key.X * VoxelConstants.ChunkSize,
                 chunk.Key.Y * VoxelConstants.ChunkSize,
-                chunk.Key.Z * VoxelConstants.ChunkSize) - (Vector3.One * 0.5f);
-            var max = min + new Vector3(VoxelConstants.ChunkSize, VoxelConstants.ChunkSize, VoxelConstants.ChunkSize);
+                chunk.Key.Z * VoxelConstants.ChunkSize) - halfExtents;
+            var max = min + new Vector3(
+                VoxelConstants.ChunkSize * HorizontalCubeSize,
+                VoxelConstants.ChunkSize * VerticalCubeSize,
+                VoxelConstants.ChunkSize * HorizontalCubeSize);
             return new BoundingBox(min, max);
         }
 
@@ -110,6 +154,17 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
             return 1;
         }
 
+        private static VertexPositionColor[] GetOrBuildChunkMesh(VoxelWorld voxelWorld, VoxelChunk chunk, int lodStep)
+        {
+            if (!chunk.TryGetCachedMesh(lodStep, out var vertices) || chunk.IsDirty)
+            {
+                vertices = VoxelMeshBuilder.BuildVertices(voxelWorld, chunk, lodStep);
+                chunk.UpdateCachedMesh(lodStep, vertices);
+            }
+
+            return vertices;
+        }
+
         public void Dispose()
         {
             _effect.Dispose();
@@ -117,13 +172,11 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
 
         private static Vector3 ToRenderPosition(float voxelX, float voxelY, float voxelZ)
         {
-            return new Vector3(voxelX, voxelZ, voxelY);
+            return new Vector3(voxelX * HorizontalCubeSize, voxelZ * VerticalCubeSize, voxelY * HorizontalCubeSize);
         }
 
         private static class VoxelMeshBuilder
         {
-            private const float CubeSize = 1f;
-
             private static readonly (int X, int Y, int Z, Face Face)[] NeighborFaces =
             [
                 (0, 1, 0, Face.Front),
@@ -186,12 +239,13 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
                 var worldX = (chunk.Key.X * VoxelConstants.ChunkSize) + startX;
                 var worldY = (chunk.Key.Y * VoxelConstants.ChunkSize) + startY;
                 var worldZ = (chunk.Key.Z * VoxelConstants.ChunkSize) + startZ;
-                var cubeSize = CubeSize * lodStep;
+                var cubeWidth = HorizontalCubeSize * lodStep;
+                var cubeHeight = VerticalCubeSize * lodStep;
                 var cubePosition = chunkOrigin + ToRenderPosition(
-                    (startX * CubeSize) + ((cubeSize - CubeSize) * 0.5f),
-                    (startY * CubeSize) + ((cubeSize - CubeSize) * 0.5f),
-                    (startZ * CubeSize) + ((cubeSize - CubeSize) * 0.5f));
-                AppendVisibleFaces(builder, voxelWorld, cubePosition, worldX, worldY, worldZ, color, lodStep, cubeSize);
+                    startX + ((lodStep - 1) * 0.5f),
+                    startY + ((lodStep - 1) * 0.5f),
+                    startZ + ((lodStep - 1) * 0.5f));
+                AppendVisibleFaces(builder, voxelWorld, cubePosition, worldX, worldY, worldZ, color, lodStep, cubeWidth, cubeHeight);
             }
 
             private static CellFillState GetCellFillState(VoxelChunk chunk, int startX, int startY, int startZ, int lodStep, out VoxelBlock block)
@@ -233,15 +287,16 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
                 return foundSolid ? CellFillState.Solid : CellFillState.Empty;
             }
 
-            private static void AppendVisibleFaces(List<VertexPositionColor> builder, VoxelWorld voxelWorld, Vector3 position, int worldX, int worldY, int worldZ, Color color, int lodStep, float cubeSize)
+            private static void AppendVisibleFaces(List<VertexPositionColor> builder, VoxelWorld voxelWorld, Vector3 position, int worldX, int worldY, int worldZ, Color color, int lodStep, float cubeWidth, float cubeHeight)
             {
-                var half = cubeSize * 0.5f;
-                var left = position.X - half;
-                var right = position.X + half;
-                var bottom = position.Y - half;
-                var top = position.Y + half;
-                var back = position.Z - half;
-                var front = position.Z + half;
+                var halfWidth = cubeWidth * 0.5f;
+                var halfHeight = cubeHeight * 0.5f;
+                var left = position.X - halfWidth;
+                var right = position.X + halfWidth;
+                var bottom = position.Y - halfHeight;
+                var top = position.Y + halfHeight;
+                var back = position.Z - halfWidth;
+                var front = position.Z + halfWidth;
 
                 var lbb = new Vector3(left, bottom, back);
                 var lbf = new Vector3(left, bottom, front);
@@ -251,6 +306,12 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
                 var rbf = new Vector3(right, bottom, front);
                 var rtb = new Vector3(right, top, back);
                 var rtf = new Vector3(right, top, front);
+                var frontColor = ShadeFace(color, Vector3.Forward);
+                var backColor = ShadeFace(color, Vector3.Backward);
+                var leftColor = ShadeFace(color, Vector3.Left);
+                var rightColor = ShadeFace(color, Vector3.Right);
+                var topColor = ShadeFace(color, Vector3.Up);
+                var bottomColor = ShadeFace(color, Vector3.Down);
 
                 foreach (var neighbor in NeighborFaces)
                 {
@@ -262,25 +323,42 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
                     switch (neighbor.Face)
                     {
                         case Face.Front:
-                            AppendQuad(builder, ltf, rtf, rbf, lbf, color);
+                            AppendQuad(builder, ltf, rtf, rbf, lbf, frontColor);
                             break;
                         case Face.Back:
-                            AppendQuad(builder, rbb, rtb, ltb, lbb, color);
+                            AppendQuad(builder, rbb, rtb, ltb, lbb, backColor);
                             break;
                         case Face.Left:
-                            AppendQuad(builder, lbf, ltf, ltb, lbb, color);
+                            AppendQuad(builder, lbf, ltf, ltb, lbb, leftColor);
                             break;
                         case Face.Right:
-                            AppendQuad(builder, rtb, rtf, rbf, rbb, color);
+                            AppendQuad(builder, rtb, rtf, rbf, rbb, rightColor);
                             break;
                         case Face.Top:
-                            AppendQuad(builder, ltb, ltf, rtf, rtb, color);
+                            AppendQuad(builder, ltb, ltf, rtf, rtb, topColor);
                             break;
                         case Face.Bottom:
-                            AppendQuad(builder, rbb, rbf, lbf, lbb, color);
+                            AppendQuad(builder, rbb, rbf, lbf, lbb, bottomColor);
                             break;
                     }
                 }
+            }
+
+            private static Color ShadeFace(Color baseColor, Vector3 normal)
+            {
+                var diffuse = MathHelper.Clamp(Vector3.Dot(normal, SunLightDirection), 0f, 1f);
+                var brightness = AmbientLight + (DiffuseLight * diffuse);
+                return MultiplyColor(baseColor, brightness);
+            }
+
+            private static Color MultiplyColor(Color color, float factor)
+            {
+                factor = MathHelper.Max(0f, factor);
+                return new Color(
+                    (byte)Math.Clamp(color.R * factor, 0f, 255f),
+                    (byte)Math.Clamp(color.G * factor, 0f, 255f),
+                    (byte)Math.Clamp(color.B * factor, 0f, 255f),
+                    color.A);
             }
 
             private static bool HasSolidNeighbor(VoxelWorld voxelWorld, int worldX, int worldY, int worldZ, int offsetX, int offsetY, int offsetZ, int lodStep)

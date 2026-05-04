@@ -27,13 +27,24 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
 
         public void SetBlock(int x, int y, int z, VoxelBlock block)
         {
-            if (_blocks[GetIndex(x, y, z)].Equals(block))
+            if (!SetBlockUnchecked(x, y, z, block))
             {
                 return;
             }
 
-            _blocks[GetIndex(x, y, z)] = block;
             MarkDirty();
+        }
+
+        internal bool SetBlockUnchecked(int x, int y, int z, VoxelBlock block)
+        {
+            var index = GetIndex(x, y, z);
+            if (_blocks[index].Equals(block))
+            {
+                return false;
+            }
+
+            _blocks[index] = block;
+            return true;
         }
 
         public void MarkDirty()
