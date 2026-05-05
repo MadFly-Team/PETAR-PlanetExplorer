@@ -1,0 +1,12 @@
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\VoxelPrototype.Core\obj\Release\net8.0\VoxelPrototype.Core.GeneratedMSBuildEditorConfig.editorconfig
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\VoxelPrototype.Core\obj\Release\net8.0\VoxelPrototype.Core.AssemblyInfoInputs.cache
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\VoxelPrototype.Core\obj\Release\net8.0\VoxelPrototype.Core.AssemblyInfo.cs
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\VoxelPrototype.Core\obj\Release\net8.0\VoxelPrototype.Core.csproj.CoreCompileInputs.cache
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\VoxelPrototype.Core\obj\Release\net8.0\VoxelPrototype.Core.sourcelink.json
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\VoxelPrototype.Core\bin\Release\net8.0\VoxelPrototype.Core.deps.json
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\VoxelPrototype.Core\bin\Release\net8.0\VoxelPrototype.Core.dll
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\VoxelPrototype.Core\bin\Release\net8.0\VoxelPrototype.Core.pdb
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\VoxelPrototype.Core\obj\Release\net8.0\VoxelPrototype.Core.dll
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\VoxelPrototype.Core\obj\Release\net8.0\refint\VoxelPrototype.Core.dll
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\VoxelPrototype.Core\obj\Release\net8.0\VoxelPrototype.Core.pdb
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\VoxelPrototype.Core\obj\Release\net8.0\ref\VoxelPrototype.Core.dll
