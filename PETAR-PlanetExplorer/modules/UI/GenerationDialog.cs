@@ -13,7 +13,8 @@ namespace PETAR_PlanetExplorer.Modules.UI
         private const int SliderLeft = 200;
         private const int SliderWidth = 250;
         private readonly SliderField[] _sliderFields;
-        private readonly OptionField _themeField;
+        private readonly OptionField<PlanetTheme> _themeField;
+        private string[] _terrainSlotLabels;
         private MouseState _previousMouseState;
         private string _seedText;
         private int _selectedIndex;
@@ -24,12 +25,14 @@ namespace PETAR_PlanetExplorer.Modules.UI
         private Rectangle _themeTrackBounds;
         private readonly Rectangle[] _sliderTrackBounds;
 
-        public GenerationDialog(WorldGenerationSettings settings)
+        public GenerationDialog(WorldGenerationSettings settings, int activeTerrainSlot = 0, int terrainSlotCount = 1, string[] terrainSlotLabels = null)
         {
             Settings = settings ?? WorldGenerationSettings.Default;
-            _themeField = new OptionField("Theme", PlanetTheme.All, Settings.Theme);
+            _themeField = new OptionField<PlanetTheme>("Theme", PlanetTheme.All, Settings.Theme);
+            _terrainSlotLabels = NormalizeTerrainSlotLabels(terrainSlotCount, terrainSlotLabels);
             _sliderFields =
             [
+                new SliderField("Town Density", GetTownDensitySliderValue(Settings.TownDensity)),
                 new SliderField("Mountains", Settings.MountainIntensity),
                 new SliderField("Plateaus", Settings.PlateauIntensity),
                 new SliderField("Volcanoes", Settings.VolcanoIntensity),
@@ -39,24 +42,37 @@ namespace PETAR_PlanetExplorer.Modules.UI
             ];
             _sliderTrackBounds = new Rectangle[_sliderFields.Length];
             _seedText = Settings.Seed.ToString();
+            SelectedTerrainEditSlot = Math.Clamp(activeTerrainSlot, 0, Math.Max(0, terrainSlotCount - 1));
         }
 
         public WorldGenerationSettings Settings { get; private set; }
+
+        public int SelectedTerrainEditSlot { get; private set; }
+
+        public string[] TerrainSlotLabels => (string[])_terrainSlotLabels.Clone();
 
         public bool IsOpen { get; private set; }
 
         public void Open(WorldGenerationSettings settings)
         {
+            Open(settings, SelectedTerrainEditSlot, Math.Max(1, _terrainSlotLabels.Length), _terrainSlotLabels);
+        }
+
+        public void Open(WorldGenerationSettings settings, int activeTerrainSlot, int terrainSlotCount, string[] terrainSlotLabels = null)
+        {
             Settings = settings ?? WorldGenerationSettings.Default;
+            _terrainSlotLabels = NormalizeTerrainSlotLabels(terrainSlotCount, terrainSlotLabels ?? _terrainSlotLabels);
             _themeField.SelectedOption = Settings.Theme;
-            _sliderFields[0].Value = Settings.MountainIntensity;
-            _sliderFields[1].Value = Settings.PlateauIntensity;
-            _sliderFields[2].Value = Settings.VolcanoIntensity;
-            _sliderFields[3].Value = Settings.CraterIntensity;
-            _sliderFields[4].Value = Settings.GorgeIntensity;
-            _sliderFields[5].Value = GetMaxColumnSliderValue(Settings.MaxCubeColumn);
+            _sliderFields[0].Value = GetTownDensitySliderValue(Settings.TownDensity);
+            _sliderFields[1].Value = Settings.MountainIntensity;
+            _sliderFields[2].Value = Settings.PlateauIntensity;
+            _sliderFields[3].Value = Settings.VolcanoIntensity;
+            _sliderFields[4].Value = Settings.CraterIntensity;
+            _sliderFields[5].Value = Settings.GorgeIntensity;
+            _sliderFields[6].Value = GetMaxColumnSliderValue(Settings.MaxCubeColumn);
             _seedText = Settings.Seed.ToString();
             _selectedIndex = 0;
+            SelectedTerrainEditSlot = Math.Clamp(activeTerrainSlot, 0, Math.Max(0, terrainSlotCount - 1));
             IsOpen = true;
         }
 
@@ -123,7 +139,7 @@ namespace PETAR_PlanetExplorer.Modules.UI
             }
 
             var dialogWidth = 600;
-            var dialogHeight = 520;
+            var dialogHeight = 560;
             var dialogBounds = new Rectangle(
                 (viewport.Width - dialogWidth) / 2,
                 (viewport.Height - dialogHeight) / 2,
@@ -152,7 +168,7 @@ namespace PETAR_PlanetExplorer.Modules.UI
             }
 
             DrawActionButtons(spriteBatch, font, pixel, dialogBounds, contentY, rowHeight, labelColor, selectedColor);
-            spriteBatch.DrawString(font, "Up/Down select  Left/Right adjust  Mouse drag sliders  Enter generate  Esc cancel", new Vector2(contentX, dialogBounds.Bottom - 34), new Color(190, 202, 214), 0f, Vector2.Zero, FontScale, SpriteEffects.None, 0f);
+            spriteBatch.DrawString(font, "Up/Down select  Left/Right adjust  Enter generate  Esc cancel", new Vector2(contentX, dialogBounds.Bottom - 34), new Color(190, 202, 214), 0f, Vector2.Zero, FontScale, SpriteEffects.None, 0f);
         }
 
         private int FieldCount => _sliderFields.Length + 2;
@@ -180,12 +196,13 @@ namespace PETAR_PlanetExplorer.Modules.UI
             Settings = Settings
                 .WithSeed(parsedSeed)
                 .WithTheme(_themeField.SelectedOption)
-                .WithMountainIntensity(_sliderFields[0].Value)
-                .WithPlateauIntensity(_sliderFields[1].Value)
-                .WithVolcanoIntensity(_sliderFields[2].Value)
-                .WithCraterIntensity(_sliderFields[3].Value)
-                .WithGorgeIntensity(_sliderFields[4].Value)
-                .WithMaxCubeColumn(GetMaxCubeColumn(_sliderFields[5].Value));
+                .WithTownDensity(GetTownDensity(_sliderFields[0].Value))
+                .WithMountainIntensity(_sliderFields[1].Value)
+                .WithPlateauIntensity(_sliderFields[2].Value)
+                .WithVolcanoIntensity(_sliderFields[3].Value)
+                .WithCraterIntensity(_sliderFields[4].Value)
+                .WithGorgeIntensity(_sliderFields[5].Value)
+                .WithMaxCubeColumn(GetMaxCubeColumn(_sliderFields[6].Value));
         }
 
         private DialogResult HandleMouseInput(MouseState mouseState)
@@ -335,7 +352,10 @@ namespace PETAR_PlanetExplorer.Modules.UI
             var isSelected = _selectedIndex == visualIndex;
             var color = isSelected ? selectedColor : labelColor;
             spriteBatch.DrawString(font, field.Label, new Vector2(x, y), color, 0f, Vector2.Zero, FontScale, SpriteEffects.None, 0f);
-            spriteBatch.DrawString(font, $"{field.Value:0.00}", new Vector2(x + SliderLeft, y), color, 0f, Vector2.Zero, FontScale, SpriteEffects.None, 0f);
+            var valueText = field.Label == "Town Density"
+                ? GetTownDensity(field.Value).ToString()
+                : $"{field.Value:0.00}";
+            spriteBatch.DrawString(font, valueText, new Vector2(x + SliderLeft, y), color, 0f, Vector2.Zero, FontScale, SpriteEffects.None, 0f);
 
             var track = new Rectangle(x + SliderLeft, y + 20, SliderWidth, 8);
             _sliderTrackBounds[visualIndex - 2] = track;
@@ -392,9 +412,35 @@ namespace PETAR_PlanetExplorer.Modules.UI
             return WorldGenerationSettings.MinimumMaxCubeColumn + (int)MathF.Round(Math.Clamp(sliderValue, 0f, 1f) * span);
         }
 
+        private static float GetTownDensitySliderValue(int townDensity)
+        {
+            return (townDensity - WorldGenerationSettings.MinimumTownDensity) /
+                (float)(WorldGenerationSettings.MaximumTownDensity - WorldGenerationSettings.MinimumTownDensity);
+        }
+
+        private static int GetTownDensity(float sliderValue)
+        {
+            var span = WorldGenerationSettings.MaximumTownDensity - WorldGenerationSettings.MinimumTownDensity;
+            return WorldGenerationSettings.MinimumTownDensity + (int)MathF.Round(Math.Clamp(sliderValue, 0f, 1f) * span);
+        }
+
         private static bool Pressed(KeyboardState current, KeyboardState previous, Keys key)
         {
             return current.IsKeyDown(key) && !previous.IsKeyDown(key);
+        }
+
+        private static string[] NormalizeTerrainSlotLabels(int terrainSlotCount, string[] terrainSlotLabels)
+        {
+            terrainSlotCount = Math.Max(1, terrainSlotCount);
+            var labels = new string[terrainSlotCount];
+            for (var index = 0; index < terrainSlotCount; index++)
+            {
+                labels[index] = terrainSlotLabels != null && index < terrainSlotLabels.Length && !string.IsNullOrWhiteSpace(terrainSlotLabels[index])
+                    ? terrainSlotLabels[index].Trim()
+                    : $"Slot {index + 1}";
+            }
+
+            return labels;
         }
 
         public enum DialogResult
@@ -406,9 +452,9 @@ namespace PETAR_PlanetExplorer.Modules.UI
             LoadPreset
         }
 
-        private sealed class OptionField
+        private sealed class OptionField<T>
         {
-            public OptionField(string label, PlanetTheme[] options, PlanetTheme selectedOption)
+            public OptionField(string label, T[] options, T selectedOption)
             {
                 Label = label;
                 Options = options;
@@ -417,9 +463,9 @@ namespace PETAR_PlanetExplorer.Modules.UI
 
             public string Label { get; }
 
-            public PlanetTheme[] Options { get; }
+            public T[] Options { get; set; }
 
-            public PlanetTheme SelectedOption { get; set; }
+            public T SelectedOption { get; set; }
 
             public void Adjust(int direction)
             {

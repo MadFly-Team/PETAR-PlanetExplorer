@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "9rh75iI6wEw=",
+  "dgSpecHash": "Gjy2MMK9UTI=",
   "success": true,
-  "projectFilePath": "D:\\NewProjects\\Games\\PETAR-PlanetExplorer\\BenchmarkSuite1\\BenchmarkSuite1.csproj",
+  "projectFilePath": "D:\\NewProjects\\Games\\PETAR-PlanetExplorer\\Trunk\\BenchmarkSuite1\\BenchmarkSuite1.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\neilb\\.nuget\\packages\\benchmarkdotnet\\0.15.2\\benchmarkdotnet.0.15.2.nupkg.sha512",
     "C:\\Users\\neilb\\.nuget\\packages\\benchmarkdotnet.annotations\\0.15.2\\benchmarkdotnet.annotations.0.15.2.nupkg.sha512",

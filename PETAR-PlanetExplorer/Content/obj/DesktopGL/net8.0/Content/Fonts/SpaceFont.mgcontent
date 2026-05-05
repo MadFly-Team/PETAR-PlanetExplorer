@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PipelineBuildEvent xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-  <SourceFile>D:/NewProjects/Games/PETAR-PlanetExplorer/PETAR-PlanetExplorer/Content/Fonts/SpaceFont.spritefont</SourceFile>
-  <SourceTime>2026-04-03T11:31:22.0282135+01:00</SourceTime>
-  <DestFile>D:/NewProjects/Games/PETAR-PlanetExplorer/PETAR-PlanetExplorer/Content/bin/DesktopGL/Content/Fonts/SpaceFont.xnb</DestFile>
-  <DestTime>2026-04-03T15:34:57.8856402+01:00</DestTime>
+  <SourceFile>D:/NewProjects/Games/PETAR-PlanetExplorer/Trunk/PETAR-PlanetExplorer/Content/Fonts/SpaceFont.spritefont</SourceFile>
+  <SourceTime>2026-04-26T23:58:33.4792025+01:00</SourceTime>
+  <DestFile>D:/NewProjects/Games/PETAR-PlanetExplorer/Trunk/PETAR-PlanetExplorer/Content/bin/DesktopGL/Content/Fonts/SpaceFont.xnb</DestFile>
+  <DestTime>2026-04-27T00:04:21.1653609+01:00</DestTime>
   <Importer>FontDescriptionImporter</Importer>
   <ImporterTime>2025-06-02T11:31:02+01:00</ImporterTime>
   <Processor>FontDescriptionProcessor</Processor>

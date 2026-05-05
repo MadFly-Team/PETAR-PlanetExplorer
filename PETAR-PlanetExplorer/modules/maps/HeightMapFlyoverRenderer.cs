@@ -21,7 +21,15 @@ namespace PETAR_PlanetExplorer.Modules.Maps
         private const float WaterAnimationQuantizationStep = 0.05f;
         private const int ReducedDetailStride = 2;
         private const int NearDetailWaterRefreshBudget = 48;
+        private const int WaterColorQuantizationLevels = 32;
         private const float WaterCullPadding = ChunkSize * 1.5f;
+        private const float VenusBubbleMinHeightWorldUnits = 0f;
+        private const float VenusBubblePeakHeightWorldUnits = 100f;
+        private const float VenusBubbleDropDistanceWorldUnits = 100f;
+        private const float VenusBubbleRadiusWorldUnits = 10.2f;
+        private const int VenusBubbleColumnStride = 22;
+        private const float VenusBubbleSpawnThreshold = 0.988f;
+        private const float VenusBubbleCycleSpeed = 0.018f;
         private const int CloudCellStride = 4;
         private const float CloudLayerOffset = 11f;
         private const float CloudThickness = CubeHeight * 2f;
@@ -37,6 +45,9 @@ namespace PETAR_PlanetExplorer.Modules.Maps
         private static readonly Color SoilColor = new Color(92, 68, 46);
         private static readonly Color WaterLowColor = new Color(12, 74, 86, 150);
         private static readonly Color WaterHighColor = new Color(56, 156, 150, 112);
+        private static readonly Color[] WaterColorRamp = BuildWaterColorRamp();
+        private static readonly Color VenusBubbleCoreColor = new Color(72, 196, 92, 126);
+        private static readonly Color VenusBubbleGlowColor = new Color(124, 238, 138, 88);
         private static readonly Color CloudLowerLowColor = new Color(64, 68, 76, 18);
         private static readonly Color CloudLowerHighColor = new Color(92, 96, 104, 32);
         private static readonly Color CloudUpperLowColor = new Color(224, 228, 236, 92);
@@ -64,6 +75,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
         private ChunkCacheKey[] _visibleChunkKeys;
         private int _activeWaterTimeBucket = int.MinValue;
         private int _nearDetailRefreshCursor;
+        private bool _useGouraudShading;
 
         public HeightMapFlyoverRenderer(GraphicsDevice graphicsDevice, int worldWidth, int worldHeight)
         {
@@ -101,22 +113,59 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                 _volcanoSmokeChunks[index] = new VoxelChunk();
                 _platformChunks[index] = new VoxelChunk();
                 _platformSmokeChunks[index] = new VoxelChunk();
+                _townDefenseChunks[index] = new VoxelChunk();
             }
         }
 
+        public bool UseGouraudShading => _useGouraudShading;
+
+        public void SetUseGouraudShading(bool useGouraudShading)
+        {
+            if (_useGouraudShading == useGouraudShading)
+            {
+                return;
+            }
+
+            _useGouraudShading = useGouraudShading;
+            _terrainChunkCache?.Clear();
+        }
+
         public void Render(ProceduralWorldMap worldMap, Vector2 cameraPosition, float heading, float pitch, float altitude, float maxFlightAltitude, float time, bool payloadReleased, IReadOnlyList<OilPlatformInstance> oilPlatforms, MissileWorldRenderState? missile, IReadOnlyList<MissileDebrisParticle> missileDebris)
+        {
+            Render(
+                worldMap,
+                new WorldViewState(
+                    cameraPosition,
+                    heading,
+                    pitch,
+                    altitude,
+                    maxFlightAltitude,
+                    true,
+                    new TruckWorldRenderState(Vector2.Zero, 0f, 0f, 0f, 0f, false),
+                    false,
+                    CubeSize * 7.4f),
+                time,
+                payloadReleased,
+                oilPlatforms,
+                missile,
+                missileDebris);
+        }
+
+        public void Render(ProceduralWorldMap worldMap, WorldViewState viewState, float time, bool payloadReleased, IReadOnlyList<OilPlatformInstance> oilPlatforms, MissileWorldRenderState? missile, IReadOnlyList<MissileDebrisParticle> missileDebris)
         {
             _graphicsDevice.Clear(ClearOptions.DepthBuffer, Color.Black, 1f, 0);
             _graphicsDevice.BlendState = BlendState.Opaque;
             _graphicsDevice.DepthStencilState = DepthStencilState.Default;
             _graphicsDevice.RasterizerState = RasterizerState.CullNone;
 
-            heading = float.IsFinite(heading) ? WrapAngle(heading) : 0f;
-            pitch = MathHelper.Clamp(float.IsFinite(pitch) ? pitch : 0f, -MaxCameraPitch, MaxCameraPitch);
-            altitude = float.IsFinite(altitude) ? altitude : 0.05f;
-            maxFlightAltitude = MathF.Max(0.05f, float.IsFinite(maxFlightAltitude) ? maxFlightAltitude : 0.05f);
-
-            var altitudeRatio = MathHelper.Clamp((altitude - 0.05f) / MathF.Max(0.0001f, maxFlightAltitude - 0.05f), 0f, 1f);
+            var cameraPosition = viewState.CameraPosition;
+            var heading = float.IsFinite(viewState.Heading) ? WrapAngle(viewState.Heading) : 0f;
+            var pitch = MathHelper.Clamp(float.IsFinite(viewState.Pitch) ? viewState.Pitch : 0f, -MaxCameraPitch, MaxCameraPitch);
+            var altitude = float.IsFinite(viewState.Altitude) ? viewState.Altitude : 0.05f;
+            var maxFlightAltitude = MathF.Max(0.05f, float.IsFinite(viewState.MaxFlightAltitude) ? viewState.MaxFlightAltitude : 0.05f);
+            var altitudeRatio = viewState.UseTruckCamera
+                ? 0f
+                : MathHelper.Clamp((altitude - 0.05f) / MathF.Max(0.0001f, maxFlightAltitude - 0.05f), 0f, 1f);
             var pitchCos = MathF.Cos(pitch);
             var forward3 = SafeNormalize(new Vector3(MathF.Cos(heading) * pitchCos, MathF.Sin(pitch), MathF.Sin(heading) * pitchCos), Vector3.Forward);
             var forward = new Vector2(forward3.X, forward3.Z);
@@ -130,12 +179,19 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             }
 
             var right = new Vector2(-forward.Y, forward.X);
-            var cameraEyeY = MathHelper.Lerp(10f, 172f, altitudeRatio);
-            var maxDistance = MathHelper.Lerp(180f, 360f, altitudeRatio);
-            var viewWidth = MathHelper.Lerp(144f, 320f, altitudeRatio);
-            var lookDistance = MathHelper.Lerp(92f, 192f, altitudeRatio) * CubeSize;
-            var cameraEye = new Vector3(0f, cameraEyeY, 18f);
-            var lookTarget = cameraEye + (forward3 * lookDistance);
+            var cameraEyeY = viewState.UseTruckCamera ? viewState.Truck.WorldY : MathHelper.Lerp(10f, 172f, altitudeRatio);
+            var maxDistance = viewState.UseTruckCamera ? 190f : MathHelper.Lerp(180f, 360f, altitudeRatio);
+            var viewWidth = viewState.UseTruckCamera ? 156f : MathHelper.Lerp(144f, 320f, altitudeRatio);
+            var lookDistance = viewState.UseTruckCamera ? CubeSize * 3.8f : MathHelper.Lerp(92f, 192f, altitudeRatio) * CubeSize;
+            var truckCameraDistance = viewState.UseTruckCamera
+                ? ComputeTruckCameraDistance(worldMap, viewState.Truck, forward3, pitch, viewState.TruckCameraDistance)
+                : viewState.TruckCameraDistance;
+            var cameraEye = viewState.UseTruckCamera
+                ? new Vector3(-(forward3.X * truckCameraDistance), cameraEyeY - (MathF.Sin(pitch) * truckCameraDistance), -(forward3.Z * truckCameraDistance))
+                : new Vector3(0f, cameraEyeY, 18f);
+            var lookTarget = viewState.UseTruckCamera
+                ? new Vector3(forward3.X * lookDistance, viewState.Truck.WorldY + CubeHeight * 1.5f, forward3.Z * lookDistance)
+                : cameraEye + (forward3 * lookDistance);
             var cameraRight3 = Vector3.Cross(Vector3.Up, forward3);
             if (cameraRight3.LengthSquared() < 0.0001f)
             {
@@ -171,19 +227,30 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                 EnsureBirdsInitialized(worldMap, cameraPosition, forward, right, maxDistance, viewWidth, time);
                 UpdateBirds(worldMap, cameraPosition, forward, right, maxDistance, viewWidth, time);
             }
-            EnsureShipInitialized(worldMap, cameraPosition, heading, time);
-            UpdateShip(cameraPosition, heading, time, payloadReleased);
+            _shipChunk.Reset();
+            _shipParticleChunk.Reset();
+            if (viewState.RenderShip)
+            {
+                EnsureShipInitialized(worldMap, cameraPosition, heading, time);
+                UpdateShip(cameraPosition, heading, time, payloadReleased);
+            }
 
             var downwardViewT = MathHelper.Clamp((-forward3.Y - 0.55f) / 0.4f, 0f, 1f) * MathHelper.Clamp((altitudeRatio - 0.82f) / 0.18f, 0f, 1f);
             var visibleChunkCount = BuildVisibleChunks(worldMap, cameraPosition, forward, right, maxDistance, viewWidth, time, downwardViewT);
             PopulateVisiblePlatformChunks(worldMap, oilPlatforms, visibleChunkCount, time);
+            PopulateVisibleTownDefenseChunks(worldMap, cameraPosition, visibleChunkCount);
             PopulateVisibleVolcanoSmokeChunks(worldMap, visibleChunkCount, time);
             PopulateMissileEffects(cameraPosition, missile, missileDebris);
-            PopulateShipChunks(
-                cameraEye + (forward3 * ShipCameraDistance) + (cameraUp * ShipVerticalOffset) + (cameraRight3 * ShipHorizontalOffset),
-                cameraRight3,
-                cameraUp,
-                forward3);
+            if (viewState.RenderShip)
+            {
+                PopulateShipChunks(
+                    cameraEye + (forward3 * ShipCameraDistance) + (cameraUp * ShipVerticalOffset) + (cameraRight3 * ShipHorizontalOffset),
+                    cameraRight3,
+                    cameraUp,
+                    forward3);
+            }
+
+            PopulateTruckChunk(cameraPosition, viewState.Truck);
 
             foreach (var pass in _effect.CurrentTechnique.Passes)
             {
@@ -248,6 +315,29 @@ namespace PETAR_PlanetExplorer.Modules.Maps
 
                     _graphicsDevice.BlendState = BlendState.AlphaBlend;
                     _graphicsDevice.DepthStencilState = DepthStencilState.DepthRead;
+                    _effect.World = _visibleChunkWorlds[index];
+                    pass.Apply();
+
+                    _graphicsDevice.DrawUserPrimitives(
+                        PrimitiveType.TriangleList,
+                        chunk.Vertices,
+                        0,
+                        chunk.VertexCount / 3);
+                }
+            }
+
+            foreach (var pass in _effect.CurrentTechnique.Passes)
+            {
+                for (var index = 0; index < visibleChunkCount; index++)
+                {
+                    var chunk = _townDefenseChunks[index];
+                    if (chunk.VertexCount == 0)
+                    {
+                        continue;
+                    }
+
+                    _graphicsDevice.BlendState = BlendState.Opaque;
+                    _graphicsDevice.DepthStencilState = DepthStencilState.Default;
                     _effect.World = _visibleChunkWorlds[index];
                     pass.Apply();
 
@@ -375,6 +465,25 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                     _shipChunk.VertexCount / 3);
             }
 
+            foreach (var pass in _effect.CurrentTechnique.Passes)
+            {
+                if (_truckChunk.VertexCount == 0)
+                {
+                    continue;
+                }
+
+                _graphicsDevice.BlendState = BlendState.Opaque;
+                _graphicsDevice.DepthStencilState = DepthStencilState.Default;
+                _effect.World = Matrix.Identity;
+                pass.Apply();
+
+                _graphicsDevice.DrawUserPrimitives(
+                    PrimitiveType.TriangleList,
+                    _truckChunk.Vertices,
+                    0,
+                    _truckChunk.VertexCount / 3);
+            }
+
             _graphicsDevice.BlendState = BlendState.AlphaBlend;
             _graphicsDevice.DepthStencilState = DepthStencilState.DepthRead;
             foreach (var pass in _effect.CurrentTechnique.Passes)
@@ -395,6 +504,32 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             }
 
             DrawMissileEffects();
+        }
+
+        private float ComputeTruckCameraDistance(ProceduralWorldMap worldMap, TruckWorldRenderState truck, Vector3 forward3, float pitch, float desiredDistance)
+        {
+            var lookTargetY = truck.WorldY + (CubeHeight * 1.5f);
+            var steps = Math.Max(4, (int)MathF.Ceiling(desiredDistance / CubeSize));
+            var safeDistance = desiredDistance;
+            for (var step = 1; step <= steps; step++)
+            {
+                var t = step / (float)steps;
+                var sampleDistance = desiredDistance * t;
+                var samplePosition = worldMap.WrapPosition(truck.Position - new Vector2(forward3.X, forward3.Z) * sampleDistance);
+                var sampleY = truck.WorldY - (MathF.Sin(pitch) * sampleDistance);
+                var terrainHeight = MathHelper.Max(worldMap.SampleHeight(samplePosition.X, samplePosition.Y), ProceduralWorldMap.SeaLevel);
+                var terrainColumn = Math.Clamp((int)MathF.Round(terrainHeight * (worldMap.MaxCubeColumn - 1)), 1, worldMap.MaxCubeColumn - 1);
+                var terrainOrigin = ProceduralWorldMap.SeaLevel * (worldMap.MaxCubeColumn - 1f);
+                var terrainY = ((terrainColumn - terrainOrigin) * CubeHeight) + FaceOverlap;
+                var clearanceY = MathHelper.Lerp(lookTargetY, sampleY, t);
+                if (terrainY + (CubeHeight * 0.35f) > clearanceY)
+                {
+                    safeDistance = Math.Max(CubeSize * 1.25f, desiredDistance * Math.Max(0f, (step - 1f) / steps));
+                    break;
+                }
+            }
+
+            return safeDistance;
         }
 
         public void Dispose()
@@ -424,49 +559,73 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             var candidates = new ChunkCandidate[MaxVisibleChunks];
             var candidateCount = 0;
             var nearDetailVisibleCount = 0;
+            var halfWorldWidth = _worldWidth * 0.5f;
+            var halfWorldHeight = _worldHeight * 0.5f;
+            var downwardView = downwardViewT > 0f;
+            var inverseMaxDistance = 1f / Math.Max(1f, maxDistance);
+            var inverseWaterMaxDistance = 1f / Math.Max(1f, waterMaxDistance);
 
             for (var chunkY = cameraChunkY - chunkRadius; chunkY <= cameraChunkY + chunkRadius; chunkY++)
             {
                 for (var chunkX = cameraChunkX - chunkRadius; chunkX <= cameraChunkX + chunkRadius; chunkX++)
                 {
                     var chunkCenter = new Vector2((chunkX * ChunkSize) + (ChunkSize * 0.5f), (chunkY * ChunkSize) + (ChunkSize * 0.5f));
-                    var wrappedOffset = GetWrappedOffset(chunkCenter - cameraPosition);
-                    var forwardDistance = Vector2.Dot(wrappedOffset, forward);
-                    var radialDistance = wrappedOffset.Length();
-                    var terrainVisible = downwardViewT > 0f
-                        ? radialDistance <= terrainCoverageRadius + ChunkSize
+                    var offsetX = chunkCenter.X - cameraPosition.X;
+                    if (offsetX > halfWorldWidth)
+                    {
+                        offsetX -= _worldWidth;
+                    }
+                    else if (offsetX < -halfWorldWidth)
+                    {
+                        offsetX += _worldWidth;
+                    }
+
+                    var offsetY = chunkCenter.Y - cameraPosition.Y;
+                    if (offsetY > halfWorldHeight)
+                    {
+                        offsetY -= _worldHeight;
+                    }
+                    else if (offsetY < -halfWorldHeight)
+                    {
+                        offsetY += _worldHeight;
+                    }
+
+                    var forwardDistance = (offsetX * forward.X) + (offsetY * forward.Y);
+                    var radialDistanceSquared = (offsetX * offsetX) + (offsetY * offsetY);
+                    var terrainVisible = downwardView
+                        ? radialDistanceSquared <= (terrainCoverageRadius + ChunkSize) * (terrainCoverageRadius + ChunkSize)
                         : forwardDistance >= -ChunkSize && forwardDistance <= maxDistance + ChunkSize;
                     if (!terrainVisible)
                     {
                         continue;
                     }
 
-                    var depthT = MathHelper.Clamp(forwardDistance / Math.Max(1f, maxDistance), 0f, 1f);
+                    var depthT = MathHelper.Clamp(forwardDistance * inverseMaxDistance, 0f, 1f);
                     var lateralLimit = MathHelper.Lerp(ChunkSize * 4f, viewWidth, MathF.Pow(depthT, 0.82f));
-                    var lateralDistance = MathF.Abs(Vector2.Dot(wrappedOffset, right));
-                    var terrainWidthVisible = downwardViewT > 0f
-                        ? radialDistance <= terrainCoverageRadius + ChunkSize
+                    var lateralDistance = MathF.Abs((offsetX * right.X) + (offsetY * right.Y));
+                    var terrainWidthVisible = downwardView
+                        ? radialDistanceSquared <= (terrainCoverageRadius + ChunkSize) * (terrainCoverageRadius + ChunkSize)
                         : lateralDistance <= lateralLimit + ChunkSize;
                     if (!terrainWidthVisible)
                     {
                         continue;
                     }
 
-                    var waterDepthT = MathHelper.Clamp(forwardDistance / Math.Max(1f, waterMaxDistance), 0f, 1f);
+                    var waterDepthT = MathHelper.Clamp(forwardDistance * inverseWaterMaxDistance, 0f, 1f);
                     var waterLateralLimit = MathHelper.Lerp(ChunkSize * 4f, waterViewWidth, MathF.Pow(waterDepthT, 0.82f));
                     var waterVisible =
-                        (downwardViewT > 0f
-                            ? radialDistance <= waterCoverageRadius + WaterCullPadding
+                        (downwardView
+                            ? radialDistanceSquared <= (waterCoverageRadius + WaterCullPadding) * (waterCoverageRadius + WaterCullPadding)
                             : forwardDistance >= -WaterCullPadding &&
                               forwardDistance <= waterMaxDistance + WaterCullPadding &&
                               lateralDistance <= waterLateralLimit + WaterCullPadding);
                     var waterReducedDetail = waterVisible && waterCullT > 0f &&
-                        (downwardViewT > 0f
-                            ? radialDistance > waterCoverageRadius * 0.58f
+                        (downwardView
+                            ? radialDistanceSquared > (waterCoverageRadius * 0.58f) * (waterCoverageRadius * 0.58f)
                             : forwardDistance > waterMaxDistance * 0.58f || lateralDistance > waterViewWidth * 0.52f);
 
-                    var candidateScore = downwardViewT > 0f
-                        ? radialDistance
+                    var candidateScore = downwardView
+                        ? radialDistanceSquared
                         : forwardDistance + (lateralDistance * 0.35f);
                     InsertCandidate(candidates, ref candidateCount, chunkX, chunkY, candidateScore, waterVisible, waterReducedDetail);
                 }
@@ -476,9 +635,15 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             {
                 var candidate = candidates[index];
                 var cacheKey = GetChunkCacheKey(candidate.ChunkX, candidate.ChunkY);
-                _chunks[index] = GetOrCreateTerrainChunk(worldMap, cacheKey);
                 _visibleChunkKeys[index] = cacheKey;
                 _visibleChunkWorlds[index] = Matrix.CreateTranslation(GetChunkTranslation(cameraPosition, candidate.ChunkX, candidate.ChunkY));
+                _chunks[index] = GetOrCreateTerrainChunk(worldMap, cacheKey);
+            }
+
+            for (var index = 0; index < candidateCount; index++)
+            {
+                var candidate = candidates[index];
+                var cacheKey = _visibleChunkKeys[index];
                 if (candidate.WaterVisible)
                 {
                     var shouldRefreshNearDetailWater = candidate.WaterReducedDetail || (nearDetailVisibleCount >= _nearDetailRefreshCursor && nearDetailVisibleCount < _nearDetailRefreshCursor + NearDetailWaterRefreshBudget);
@@ -592,9 +757,15 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                 return chunk;
             }
 
-            chunk = new VoxelChunk();
-            PopulateTerrainChunk(chunk, worldMap, cacheKey.StartX, cacheKey.StartY);
+            chunk = BuildTerrainChunk(worldMap, cacheKey);
             _terrainChunkCache[cacheKey] = chunk;
+            return chunk;
+        }
+
+        private VoxelChunk BuildTerrainChunk(ProceduralWorldMap worldMap, ChunkCacheKey cacheKey)
+        {
+            var chunk = new VoxelChunk();
+            PopulateTerrainChunk(chunk, worldMap, cacheKey.StartX, cacheKey.StartY);
             return chunk;
         }
 
@@ -613,7 +784,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                     return cacheEntry.Chunk;
                 }
 
-                PopulateWaterChunk(cacheEntry.Chunk, cacheKey.StartX, cacheKey.StartY, quantizedTime, reducedDetail, cacheEntry.NearDetailSurfaceHeights, cacheEntry.NearDetailShoreMasks, cacheEntry.ReducedSurfaceHeights);
+                PopulateWaterChunk(cacheEntry.Chunk, worldMap, cacheKey.StartX, cacheKey.StartY, quantizedTime, reducedDetail, cacheEntry.NearDetailSurfaceHeights, cacheEntry.NearDetailShoreMasks, cacheEntry.ReducedSurfaceHeights);
                 cacheEntry.TimeBucket = timeBucket;
                 cacheEntry.ReducedDetail = reducedDetail;
                 return cacheEntry.Chunk;
@@ -621,7 +792,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
 
             var chunk = new VoxelChunk();
             var newCacheEntry = BuildWaterChunkCacheEntry(worldMap, cacheKey, chunk, timeBucket, reducedDetail);
-            PopulateWaterChunk(newCacheEntry.Chunk, cacheKey.StartX, cacheKey.StartY, quantizedTime, reducedDetail, newCacheEntry.NearDetailSurfaceHeights, newCacheEntry.NearDetailShoreMasks, newCacheEntry.ReducedSurfaceHeights);
+            PopulateWaterChunk(newCacheEntry.Chunk, worldMap, cacheKey.StartX, cacheKey.StartY, quantizedTime, reducedDetail, newCacheEntry.NearDetailSurfaceHeights, newCacheEntry.NearDetailShoreMasks, newCacheEntry.ReducedSurfaceHeights);
             _waterChunkCache[cacheKey] = newCacheEntry;
             return chunk;
         }
@@ -750,17 +921,30 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                     var frontNeighbor = GetColumnHeight(worldMap.SampleVoxelHeight(worldX, worldY + 1f), worldMap.MaxCubeColumn);
                     var topBlockHeight = MathF.Max(surfaceHeight, ProceduralWorldMap.SeaLevel + 0.025f);
                     var isShadowed = IsShadowed(worldMap, worldX, worldY, columnHeight);
-                    var topColor = ShadeFace(worldMap.GetColorForHeight(topBlockHeight, false), Vector3.Up, isShadowed);
+                    var topBaseColor = worldMap.SampleSurfaceColor(worldX, worldY);
+                    var topColor = ShadeFace(topBaseColor, Vector3.Up, isShadowed);
                     var leftColor = ShadeFace(SoilColor, Vector3.Left, isShadowed);
                     var rightColor = ShadeFace(SoilColor, Vector3.Right, isShadowed);
                     var backColor = ShadeFace(SoilColor, Vector3.Backward, isShadowed);
                     var frontColor = ShadeFace(SoilColor, Vector3.Forward, isShadowed);
 
-                    AppendTopFace(chunk, localPosition, columnHeight, worldMap.MaxCubeColumn, topColor);
-                    AppendSideFaces(chunk, localPosition, columnHeight, leftNeighbor, worldMap.MaxCubeColumn, Side.Left, leftColor);
-                    AppendSideFaces(chunk, localPosition, columnHeight, rightNeighbor, worldMap.MaxCubeColumn, Side.Right, rightColor);
-                    AppendSideFaces(chunk, localPosition, columnHeight, backNeighbor, worldMap.MaxCubeColumn, Side.Back, backColor);
-                    AppendSideFaces(chunk, localPosition, columnHeight, frontNeighbor, worldMap.MaxCubeColumn, Side.Front, frontColor);
+                    if (_useGouraudShading)
+                    {
+                        var topCornerColors = GetTopCornerColors(worldMap, worldX, worldY, topBaseColor, isShadowed);
+                        AppendTopFace(chunk, localPosition, columnHeight, worldMap.MaxCubeColumn, topCornerColors);
+                        AppendSideFaces(chunk, localPosition, columnHeight, leftNeighbor, worldMap.MaxCubeColumn, Side.Left, GetSideFaceCornerColors(leftColor, topCornerColors[3], topCornerColors[0]));
+                        AppendSideFaces(chunk, localPosition, columnHeight, rightNeighbor, worldMap.MaxCubeColumn, Side.Right, GetSideFaceCornerColors(rightColor, topCornerColors[1], topCornerColors[2]));
+                        AppendSideFaces(chunk, localPosition, columnHeight, backNeighbor, worldMap.MaxCubeColumn, Side.Back, GetSideFaceCornerColors(backColor, topCornerColors[0], topCornerColors[1]));
+                        AppendSideFaces(chunk, localPosition, columnHeight, frontNeighbor, worldMap.MaxCubeColumn, Side.Front, GetSideFaceCornerColors(frontColor, topCornerColors[2], topCornerColors[3]));
+                    }
+                    else
+                    {
+                        AppendTopFace(chunk, localPosition, columnHeight, worldMap.MaxCubeColumn, topColor);
+                        AppendSideFaces(chunk, localPosition, columnHeight, leftNeighbor, worldMap.MaxCubeColumn, Side.Left, leftColor);
+                        AppendSideFaces(chunk, localPosition, columnHeight, rightNeighbor, worldMap.MaxCubeColumn, Side.Right, rightColor);
+                        AppendSideFaces(chunk, localPosition, columnHeight, backNeighbor, worldMap.MaxCubeColumn, Side.Back, backColor);
+                        AppendSideFaces(chunk, localPosition, columnHeight, frontNeighbor, worldMap.MaxCubeColumn, Side.Front, frontColor);
+                    }
                 }
             }
 
@@ -770,10 +954,14 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             }
         }
 
-        private void PopulateWaterChunk(VoxelChunk waterChunk, int chunkStartX, int chunkStartY, float time, bool reducedDetail, float[] nearDetailSurfaceHeights, byte[] nearDetailShoreMasks, float[] reducedSurfaceHeights)
+        private void PopulateWaterChunk(VoxelChunk waterChunk, ProceduralWorldMap worldMap, int chunkStartX, int chunkStartY, float time, bool reducedDetail, float[] nearDetailSurfaceHeights, byte[] nearDetailShoreMasks, float[] reducedSurfaceHeights)
         {
             waterChunk.Reset();
             var cellStride = reducedDetail ? ReducedDetailStride : 1;
+            var waveSampleStride = reducedDetail ? ReducedDetailStride : 1;
+            var waveGridWidth = reducedDetail ? (ChunkSize / ReducedDetailStride) : ChunkSize;
+            var waterThickness = CubeHeight * 0.92f;
+            var baseWaterY = GetCubeBottom(ProceduralWorldMap.SeaLevel * (DefaultChunkHeight - 1), DefaultChunkHeight);
             Span<int> wrappedSampleX = stackalloc int[ChunkSize + 2];
             Span<int> wrappedSampleY = stackalloc int[ChunkSize + 2];
             Span<float> waveHeights = reducedDetail
@@ -794,9 +982,10 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             {
                 for (var sampleZ = 0; sampleZ < ChunkSize; sampleZ++)
                 {
+                    var wrappedWorldY = wrappedSampleY[sampleZ + 1] + 0.5f;
                     for (var sampleX = 0; sampleX < ChunkSize; sampleX++)
                     {
-                        waveHeights[GetWaveSampleIndex(sampleX, sampleZ)] = ComputeWaterWave(wrappedSampleX[sampleX + 1] + 0.5f, wrappedSampleY[sampleZ + 1] + 0.5f, time);
+                        waveHeights[(sampleZ * waveGridWidth) + sampleX] = ComputeWaterWave(wrappedSampleX[sampleX + 1] + 0.5f, wrappedWorldY, time);
                     }
                 }
             }
@@ -808,13 +997,14 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                     {
                         var sampleWorldX = GetReducedDetailSampleCoordinate(wrappedSampleX, sampleX, cellStride, _worldWidth);
                         var sampleWorldY = GetReducedDetailSampleCoordinate(wrappedSampleY, sampleZ, cellStride, _worldHeight);
-                        waveHeights[GetReducedWaveSampleIndex(sampleX / cellStride, sampleZ / cellStride)] = ComputeWaterWave(sampleWorldX, sampleWorldY, time);
+                        waveHeights[((sampleZ / cellStride) * waveGridWidth) + (sampleX / cellStride)] = ComputeWaterWave(sampleWorldX, sampleWorldY, time);
                     }
                 }
             }
 
             for (var localZ = 0; localZ < ChunkSize; localZ += cellStride)
             {
+                var waveSampleZ = localZ / waveSampleStride;
                 for (var localX = 0; localX < ChunkSize; localX += cellStride)
                 {
                     var blockWidth = Math.Min(cellStride, ChunkSize - localX);
@@ -822,33 +1012,90 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                     var centerX = localX + (blockWidth * 0.5f);
                     var centerZ = localZ + (blockDepth * 0.5f);
                     var localPosition = GetChunkLocalPosition(centerX, centerZ);
+                    var sampleIndex = (waveSampleZ * waveGridWidth) + (localX / waveSampleStride);
+                    var waveHeight = waveHeights[sampleIndex];
 
                     if (reducedDetail)
                     {
                         AppendWaterCell(
                             waterChunk,
                             localPosition,
-                            reducedSurfaceHeights![GetReducedWaveSampleIndex(localX / cellStride, localZ / cellStride)],
+                            reducedSurfaceHeights![sampleIndex],
                             0,
-                            waveHeights[GetReducedWaveSampleIndex(localX / cellStride, localZ / cellStride)],
+                            waveHeight,
                             blockWidth,
                             blockDepth,
                             false,
-                            DefaultChunkHeight);
+                            DefaultChunkHeight,
+                            baseWaterY,
+                            waterThickness);
                         continue;
                     }
 
-                    var sampleIndex = GetWaveSampleIndex(localX, localZ);
                     AppendWaterCell(
                         waterChunk,
                         localPosition,
                         nearDetailSurfaceHeights![sampleIndex],
                         nearDetailShoreMasks![sampleIndex],
-                        waveHeights[sampleIndex],
+                        waveHeight,
                         1,
                         1,
                         true,
-                        DefaultChunkHeight);
+                        DefaultChunkHeight,
+                        baseWaterY,
+                        waterThickness);
+                }
+            }
+
+            if (worldMap.Theme == PlanetTheme.Venus)
+            {
+                AppendVenusBubbleColumns(waterChunk, worldMap, chunkStartX, chunkStartY, time, worldMap.MaxCubeColumn);
+            }
+
+        }
+
+        private void AppendVenusBubbleColumns(VoxelChunk waterChunk, ProceduralWorldMap worldMap, int chunkStartX, int chunkStartY, float time, int chunkHeight)
+        {
+            for (var columnZ = 1; columnZ < ChunkSize; columnZ += VenusBubbleColumnStride)
+            {
+                for (var columnX = 1; columnX < ChunkSize; columnX += VenusBubbleColumnStride)
+                {
+                    var worldX = chunkStartX + columnX;
+                    var worldY = chunkStartY + columnZ;
+                    if (worldMap.SampleVoxelHeight(worldX + 0.5f, worldY + 0.5f) >= ProceduralWorldMap.SeaLevel)
+                    {
+                        continue;
+                    }
+
+                    var bubbleSeed = (MathF.Sin((worldX * 0.173f) + (worldY * 0.117f)) + 1f) * 0.5f;
+                    if (bubbleSeed < VenusBubbleSpawnThreshold)
+                    {
+                        continue;
+                    }
+
+                    var cycleOffset = ((MathF.Sin((worldX * 0.081f) + (worldY * 0.067f)) + 1f) * 0.5f);
+                    var cycle = ((time * VenusBubbleCycleSpeed) + cycleOffset) % 1f;
+                    if (cycle < 0f)
+                    {
+                        cycle += 1f;
+                    }
+
+                    var riseT = cycle < 0.9f
+                        ? cycle / 0.9f
+                        : 1f - MathHelper.Clamp((cycle - 0.9f) / 0.1f, 0f, 1f);
+                    var dropT = cycle < 0.9f
+                        ? 0f
+                        : MathHelper.Clamp((cycle - 0.9f) / 0.1f, 0f, 1f);
+                    var baseWaterY = GetCubeBottom(ProceduralWorldMap.SeaLevel * (chunkHeight - 1), chunkHeight);
+                    var centerY = baseWaterY + VenusBubbleMinHeightWorldUnits + (riseT * VenusBubblePeakHeightWorldUnits) - (dropT * VenusBubbleDropDistanceWorldUnits);
+                    var pulse = 0.9f + (0.1f * MathF.Sin((time * 0.24f) + (worldX * 0.13f) + (worldY * 0.11f)));
+                    var radius = VenusBubbleRadiusWorldUnits * pulse;
+                    var localPosition = GetChunkLocalPosition(columnX + 0.5f, columnZ + 0.5f);
+                    var bubbleCenter = new Vector3(localPosition.X, centerY, localPosition.Z);
+
+                    AppendAxisAlignedCube(waterChunk, bubbleCenter, radius, radius * 0.88f, VenusBubbleCoreColor);
+                    AppendAxisAlignedCube(waterChunk, bubbleCenter + new Vector3(0f, radius * 0.34f, 0f), radius * 0.68f, radius * 0.52f, VenusBubbleGlowColor);
+                    AppendAxisAlignedCube(waterChunk, bubbleCenter + new Vector3(radius * 0.24f, -radius * 0.22f, -radius * 0.18f), radius * 0.44f, radius * 0.32f, VenusBubbleGlowColor);
                 }
             }
         }
@@ -1027,6 +1274,17 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             AppendQuad(chunk, v0, v1, v2, v3, color);
         }
 
+        private void AppendTopFace(VoxelChunk chunk, Vector3 localPosition, int columnHeight, int chunkHeight, ReadOnlySpan<Color> cornerColors)
+        {
+            var half = (CubeSize * 0.5f) + FaceOverlap;
+            var topY = GetCubeBottom(columnHeight, chunkHeight) + FaceOverlap;
+            var v0 = new Vector3(localPosition.X - half, topY, localPosition.Z - half);
+            var v1 = new Vector3(localPosition.X + half, topY, localPosition.Z - half);
+            var v2 = new Vector3(localPosition.X + half, topY, localPosition.Z + half);
+            var v3 = new Vector3(localPosition.X - half, topY, localPosition.Z + half);
+            AppendQuad(chunk, v0, cornerColors[0], v1, cornerColors[1], v2, cornerColors[2], v3, cornerColors[3]);
+        }
+
         private void AppendSideFaces(VoxelChunk chunk, Vector3 localPosition, int columnHeight, int neighborHeight, int chunkHeight, Side side, Color color)
         {
             if (neighborHeight >= columnHeight)
@@ -1036,6 +1294,17 @@ namespace PETAR_PlanetExplorer.Modules.Maps
 
             var startLevel = Math.Max(0, neighborHeight);
             AppendColumnSide(chunk, localPosition, startLevel, columnHeight, chunkHeight, side, color);
+        }
+
+        private void AppendSideFaces(VoxelChunk chunk, Vector3 localPosition, int columnHeight, int neighborHeight, int chunkHeight, Side side, ReadOnlySpan<Color> cornerColors)
+        {
+            if (neighborHeight >= columnHeight)
+            {
+                return;
+            }
+
+            var startLevel = Math.Max(0, neighborHeight);
+            AppendColumnSide(chunk, localPosition, startLevel, columnHeight, chunkHeight, side, cornerColors);
         }
 
         private void AppendColumnSide(VoxelChunk chunk, Vector3 localPosition, int startLevel, int endLevel, int chunkHeight, Side side, Color color)
@@ -1080,13 +1349,94 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             AppendQuad(chunk, v0, v1, v2, v3, color);
         }
 
+        private void AppendColumnSide(VoxelChunk chunk, Vector3 localPosition, int startLevel, int endLevel, int chunkHeight, Side side, ReadOnlySpan<Color> cornerColors)
+        {
+            var half = (CubeSize * 0.5f) + FaceOverlap;
+            var bottomY = GetCubeBottom(startLevel, chunkHeight) - FaceOverlap;
+            var topY = GetCubeBottom(endLevel, chunkHeight) + FaceOverlap;
+
+            Vector3 v0;
+            Vector3 v1;
+            Vector3 v2;
+            Vector3 v3;
+
+            switch (side)
+            {
+                case Side.Left:
+                    v0 = new Vector3(localPosition.X - half, topY, localPosition.Z + half);
+                    v1 = new Vector3(localPosition.X - half, topY, localPosition.Z - half);
+                    v2 = new Vector3(localPosition.X - half, bottomY, localPosition.Z - half);
+                    v3 = new Vector3(localPosition.X - half, bottomY, localPosition.Z + half);
+                    break;
+                case Side.Right:
+                    v0 = new Vector3(localPosition.X + half, topY, localPosition.Z - half);
+                    v1 = new Vector3(localPosition.X + half, topY, localPosition.Z + half);
+                    v2 = new Vector3(localPosition.X + half, bottomY, localPosition.Z + half);
+                    v3 = new Vector3(localPosition.X + half, bottomY, localPosition.Z - half);
+                    break;
+                case Side.Back:
+                    v0 = new Vector3(localPosition.X + half, topY, localPosition.Z - half);
+                    v1 = new Vector3(localPosition.X - half, topY, localPosition.Z - half);
+                    v2 = new Vector3(localPosition.X - half, bottomY, localPosition.Z - half);
+                    v3 = new Vector3(localPosition.X + half, bottomY, localPosition.Z - half);
+                    break;
+                default:
+                    v0 = new Vector3(localPosition.X - half, topY, localPosition.Z + half);
+                    v1 = new Vector3(localPosition.X + half, topY, localPosition.Z + half);
+                    v2 = new Vector3(localPosition.X + half, bottomY, localPosition.Z + half);
+                    v3 = new Vector3(localPosition.X - half, bottomY, localPosition.Z + half);
+                    break;
+            }
+
+            AppendQuad(chunk, v0, cornerColors[0], v1, cornerColors[1], v2, cornerColors[2], v3, cornerColors[3]);
+        }
+
         private static void AppendQuad(VoxelChunk chunk, Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, Color color)
         {
             chunk.AppendTriangle(v0, v1, v2, color);
             chunk.AppendTriangle(v0, v2, v3, color);
         }
 
-        private void AppendWaterCell(VoxelChunk chunk, Vector3 localPosition, float surfaceHeight, byte shoreMask, float waveHeight, int cellWidth, int cellDepth, bool renderSides, int chunkHeight)
+        private static void AppendQuad(VoxelChunk chunk, Vector3 v0, Color c0, Vector3 v1, Color c1, Vector3 v2, Color c2, Vector3 v3, Color c3)
+        {
+            chunk.AppendTriangle(v0, c0, v1, c1, v2, c2);
+            chunk.AppendTriangle(v0, c0, v2, c2, v3, c3);
+        }
+
+        private Color[] GetTopCornerColors(ProceduralWorldMap worldMap, float worldX, float worldY, Color baseColor, bool isShadowed)
+        {
+            return
+            [
+                ShadeFace(baseColor, ComputeTerrainNormal(worldMap, worldX - 0.5f, worldY - 0.5f), isShadowed),
+                ShadeFace(baseColor, ComputeTerrainNormal(worldMap, worldX + 0.5f, worldY - 0.5f), isShadowed),
+                ShadeFace(baseColor, ComputeTerrainNormal(worldMap, worldX + 0.5f, worldY + 0.5f), isShadowed),
+                ShadeFace(baseColor, ComputeTerrainNormal(worldMap, worldX - 0.5f, worldY + 0.5f), isShadowed)
+            ];
+        }
+
+        private static Color[] GetSideFaceCornerColors(Color faceColor, Color topLeftColor, Color topRightColor)
+        {
+            return
+            [
+                Color.Lerp(faceColor, topLeftColor, 0.72f),
+                Color.Lerp(faceColor, topRightColor, 0.72f),
+                faceColor,
+                faceColor
+            ];
+        }
+
+        private static Vector3 ComputeTerrainNormal(ProceduralWorldMap worldMap, float worldX, float worldY)
+        {
+            var left = worldMap.SampleVoxelHeight(worldX - 1f, worldY);
+            var right = worldMap.SampleVoxelHeight(worldX + 1f, worldY);
+            var back = worldMap.SampleVoxelHeight(worldX, worldY - 1f);
+            var front = worldMap.SampleVoxelHeight(worldX, worldY + 1f);
+            var xSlope = (right - left) * CubeHeight;
+            var zSlope = (front - back) * CubeHeight;
+            return SafeNormalize(new Vector3(-xSlope, CubeSize * 2f, -zSlope), Vector3.Up);
+        }
+
+        private void AppendWaterCell(VoxelChunk chunk, Vector3 localPosition, float surfaceHeight, byte shoreMask, float waveHeight, int cellWidth, int cellDepth, bool renderSides, int chunkHeight, float baseWaterY, float waterThickness)
         {
             if (surfaceHeight >= ProceduralWorldMap.SeaLevel)
             {
@@ -1095,10 +1445,11 @@ namespace PETAR_PlanetExplorer.Modules.Maps
 
             var halfX = (CubeSize * cellWidth * 0.5f) + FaceOverlap;
             var halfZ = (CubeSize * cellDepth * 0.5f) + FaceOverlap;
-            var baseWaterY = GetCubeBottom(ProceduralWorldMap.SeaLevel * (chunkHeight - 1), chunkHeight);
             var topY = baseWaterY + waveHeight + FaceOverlap;
-            var bottomY = topY - (CubeHeight * 0.92f);
-            var waterColor = Color.Lerp(WaterLowColor, WaterHighColor, MathHelper.Clamp((waveHeight / (CubeHeight * 0.42f) * 0.5f) + 0.5f, 0f, 1f));
+            var bottomY = topY - waterThickness;
+            var waveColorT = MathHelper.Clamp((waveHeight / (CubeHeight * 0.42f) * 0.5f) + 0.5f, 0f, 1f);
+            var waterColorIndex = Math.Clamp((int)MathF.Round(waveColorT * (WaterColorQuantizationLevels - 1)), 0, WaterColorQuantizationLevels - 1);
+            var waterColor = WaterColorRamp[waterColorIndex];
 
             var v0 = new Vector3(localPosition.X - halfX, topY, localPosition.Z - halfZ);
             var v1 = new Vector3(localPosition.X + halfX, topY, localPosition.Z - halfZ);
@@ -1187,6 +1538,18 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                 (swell * 0.18f) +
                 (chop * 0.16f);
             return wave * (CubeHeight * 0.72f);
+        }
+
+        private static Color[] BuildWaterColorRamp()
+        {
+            var colors = new Color[WaterColorQuantizationLevels];
+            for (var index = 0; index < colors.Length; index++)
+            {
+                var t = index / (float)(colors.Length - 1);
+                colors[index] = Color.Lerp(WaterLowColor, WaterHighColor, t);
+            }
+
+            return colors;
         }
 
         private static Color ShadeFace(Color baseColor, Vector3 normal, bool isShadowed)
@@ -1428,6 +1791,14 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                 Vertices[VertexCount++] = new VertexPositionColor(c, color);
             }
 
+            public void AppendTriangle(Vector3 a, Color colorA, Vector3 b, Color colorB, Vector3 c, Color colorC)
+            {
+                EnsureCapacity(3);
+                Vertices[VertexCount++] = new VertexPositionColor(a, colorA);
+                Vertices[VertexCount++] = new VertexPositionColor(b, colorB);
+                Vertices[VertexCount++] = new VertexPositionColor(c, colorC);
+            }
+
             private void EnsureCapacity(int additionalVertices)
             {
                 var requiredCapacity = VertexCount + additionalVertices;
@@ -1440,5 +1811,9 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                 Array.Resize(ref _vertices, newCapacity);
             }
         }
+
+        public readonly record struct WorldViewState(Vector2 CameraPosition, float Heading, float Pitch, float Altitude, float MaxFlightAltitude, bool RenderShip, TruckWorldRenderState Truck, bool UseTruckCamera, float TruckCameraDistance);
+
+        public readonly record struct TruckWorldRenderState(Vector2 Position, float WorldY, float Heading, float WheelRotation, float Pitch, bool IsVisible);
     }
 }

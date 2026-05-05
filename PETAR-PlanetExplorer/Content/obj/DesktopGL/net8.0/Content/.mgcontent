@@ -4,7 +4,7 @@
   <Platform>DesktopGL</Platform>
   <Config />
   <SourceFiles>
-    <File>D:/NewProjects/Games/PETAR-PlanetExplorer/PETAR-PlanetExplorer/Content/Fonts/SpaceFont.spritefont</File>
+    <File>D:/NewProjects/Games/PETAR-PlanetExplorer/Trunk/PETAR-PlanetExplorer/Content/Fonts/SpaceFont.spritefont</File>
   </SourceFiles>
   <DestFiles>
     <File xsi:nil="true" />

@@ -10,7 +10,8 @@
         "dependencies": {
           "BenchmarkDotNet": "0.15.2",
           "Microsoft.VisualStudio.DiagnosticsHub.BenchmarkDotNetDiagnosers": "18.3.36812.1",
-          "PETAR-PlanetExplorer": "1.0.0"
+          "PETAR-PlanetExplorer": "1.0.0",
+          "VoxelPrototype.Core": "1.0.0"
         },
         "runtime": {
           "BenchmarkSuite1.dll": {}
@@ -502,10 +503,32 @@
       },
       "PETAR-PlanetExplorer/1.0.0": {
         "dependencies": {
-          "MonoGame.Framework.DesktopGL": "3.8.4.1"
+          "MonoGame.Framework.DesktopGL": "3.8.4.1",
+          "VoxelPrototype.Core": "1.0.0",
+          "VoxelPrototype.Renderer": "1.0.0"
         },
         "runtime": {
           "PETAR-PlanetExplorer.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "VoxelPrototype.Core/1.0.0": {
+        "runtime": {
+          "VoxelPrototype.Core.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "VoxelPrototype.Renderer/1.0.0": {
+        "dependencies": {
+          "MonoGame.Framework.DesktopGL": "3.8.4.1",
+          "VoxelPrototype.Core": "1.0.0"
+        },
+        "runtime": {
+          "VoxelPrototype.Renderer.dll": {
             "assemblyVersion": "1.0.0.0",
             "fileVersion": "1.0.0.0"
           }
@@ -702,6 +725,16 @@
       "hashPath": "system.reflection.metadata.9.0.0.nupkg.sha512"
     },
     "PETAR-PlanetExplorer/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "VoxelPrototype.Core/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "VoxelPrototype.Renderer/1.0.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""

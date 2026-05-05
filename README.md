@@ -1,15 +1,23 @@
 # PETAR-PlanetExplorer
 
 PETAR-PlanetExplorer is a procedural planet flyover and exploration prototype built with .NET 8 and MonoGame DesktopGL.
-It generates large stylized planets, lets the player switch between a strategic plan view and an immersive world view, and includes gameplay systems such as payload deployment, oil rig placement, missile-based terrain destruction, terrain-follow flight, procedural themes, and voxel-style horizon rendering.
+It generates large stylized planets, lets the player switch between a strategic plan view and an immersive world view, and includes gameplay systems such as payload deployment, oil rig placement, missile-based terrain destruction, terrain-follow flight, procedural themes, switchable flat/Gouraud horizon shading, an alternate voxel-style horizon renderer, and a drivable truck vehicle that can be used on development sites with orbit camera control, terrain-responsive tilt, and terrain-aware camera clipping.
 
 This README is intended to document the current state of the project for development, maintenance, and GitHub check-in.
 
 ## Main Game View
 
 ![PETAR-PlanetExplorer main game view](./Graphics/ScreenShots/PETAR1.jpg)
+![PETAR-PlanetExplorer main game view](./Graphics/ScreenShots/PETAR2.jpg)
+![PETAR-PlanetExplorer main game view](./Graphics/ScreenShots/PETAR3.jpg)
+![PETAR-PlanetExplorer main game view](./Graphics/ScreenShots/PETAR4.jpg)
+![PETAR-PlanetExplorer main game view](./Graphics/ScreenShots/PETAR5.jpg)
 
----
+The follow captured video is jerky,  but it demonstrates the core gameplay systems in action. The game runs in 60 frames at present.
+
+<video src="./Graphics/Videos/petar.mp4" controls muted loop playsinline width="960">
+  Your browser does not support embedded video playback. Download the video from <code>./Graphics/Videos/petar.mp4</code>.
+</video>
 
 ## Table of Contents
 
@@ -70,20 +78,29 @@ That design choice enables a large world size while keeping the terrain pipeline
 - Terrain destruction from spherical blast radius
 - Missile debris rendering
 - Multiple visual themes including many generated/randomized themes
+- Procedural development sites, roads, and towns
+- Town defense missile-post visuals that track the craft without firing
+- TAB-based switching between the ship and a drivable truck
+- Truck terrain-follow driving with visual body tilt over slopes and terrain-step collision for larger obstacles
 
 ### Visual systems
 
 - Voxel-column terrain rendering
+- Switchable flat/Gouraud shading in the standard horizon renderer
 - Water surface rendering
 - Cloud rendering
 - Birds in life-supporting worlds
 - Ship rendering
+- Truck rendering
 - Ship engine particle effects
 - Volcano smoke effects
 - Oil platform smoke effects
+- Venus bubble columns and non-life surface-water rendering
 - HUD and loading overlays
-- Minimap and world markers
+- Minimap and development-site markers
 - Fog-based atmospheric depth
+- Alternate voxel horizon renderer
+- Orbit camera for the truck vehicle with mouse-wheel zoom and terrain-aware camera distance
 
 ### Development support
 
@@ -133,16 +150,19 @@ PETAR-PlanetExplorer/
   - core game loop
   - input handling
   - flight logic
+	 - truck movement and vehicle switching
   - world generation orchestration
   - payload handling
   - missile simulation
-  - minimap refresh and gameplay state
+	 - minimap refresh and gameplay state
+   - world-view renderer and shading toggles
 
 #### Terrain and map systems
 - `PETAR-PlanetExplorer/modules/maps/ProceduralWorldMap.cs`
   - procedural terrain generation
   - height sampling
-  - rivers
+	 - development sites, roads, towns, and minimap data
+   - rivers
   - trees
   - volcano vent detection
   - terrain destruction for missile impacts
@@ -151,13 +171,15 @@ PETAR-PlanetExplorer/
   - generation parameter model and defaults
 
 - `PETAR-PlanetExplorer/modules/maps/PlanetTheme.cs`
-  - built-in and generated planet themes
+	 - built-in and generated planet themes
+   - explicit non-life water support and themed sea colors
 
 - `PETAR-PlanetExplorer/modules/maps/HeightMapFlyoverRenderer.cs`
-  - voxel-style world-view renderer
+	- horizon flyover world renderer
   - visible chunk generation
   - fog and camera setup
-  - water, terrain, smoke, cloud, and object draw flow
+	 - switchable flat/Gouraud terrain shading
+   - water, terrain, smoke, cloud, bubble, and object draw flow
 
 #### Game/world objects
 - `PETAR-PlanetExplorer/modules/GameObjects/HeightMapFlyoverRenderer.OilRig.cs`
@@ -166,11 +188,19 @@ PETAR-PlanetExplorer/
 - `PETAR-PlanetExplorer/modules/GameObjects/HeightMapFlyoverRenderer.Missile.cs`
   - missile render state and debris visuals
 
+- `PETAR-PlanetExplorer/modules/GameObjects/HeightMapFlyoverRenderer.TownDefense.cs`
+  - town-edge missile tower and launcher visuals
+
 #### Ship and entity visuals
 - `PETAR-PlanetExplorer/modules/Player/HeightMapFlyoverRenderer.Ship.cs`
   - ship model rendering
   - payload visual behavior
   - ship engine particle effects
+
+- `PETAR-PlanetExplorer/modules/Player/HeightMapFlyoverRenderer.Truck.cs`
+  - truck model rendering
+  - rotating wheel visuals
+  - fixed chase-camera support constants
 
 - `PETAR-PlanetExplorer/modules/MapObjects/HeightMapFlyoverRenderer.Trees.cs`
   - tree rendering
@@ -240,16 +270,25 @@ dotnet build
 
 ### General
 - `Esc` - exit
+- `Tab` - switch between the ship and the truck
 - `F12` - toggle fullscreen
 - `F11` - toggle between plan view and world view
 - `F10` - regenerate the world with a random seed
 - `F8` - open world generation dialog
+- `F7` - toggle the alternate voxel horizon renderer
+- `F6` - toggle standard horizon shading between Gouraud and flat (`Gouraud` starts enabled)
+- `F5` - cycle the active terrain edit slot
 - `F9` - toggle terrain-follow flight mode
 
 ### Flight movement
 - `W` / `S` or `Up` / `Down` - forward / reverse
 - `A` / `D` or `Left` / `Right` - turn
 - `Shift` - boost
+
+### Truck movement
+- `W` / `S` or `Up` / `Down` - drive forward / reverse
+- `A` / `D` or `Left` / `Right` - steer the truck
+- `Shift` - faster truck movement
 
 ### Vertical movement
 - Ascend:
@@ -266,6 +305,8 @@ dotnet build
 
 ### Mouse
 - In world view, mouse movement controls look direction.
+- When driving the truck, mouse movement orbits the camera around the truck.
+- Mouse wheel zooms the truck camera in and out.
 
 ### Gameplay actions
 - `P` - release payload / deploy oil platform payload
@@ -280,6 +321,7 @@ The planet is generated procedurally from a seed and a group of tunable paramete
 ### Current generation parameters
 - Seed
 - Theme
+- Town density
 - Mountain intensity
 - Plateau intensity
 - Volcano intensity
@@ -298,11 +340,15 @@ Defined in `WorldGenerationSettings.cs`:
 - Craters: `0.35`
 - Gorges: `0.25`
 - Max cube columns: `96`
+- Town density: `40`
 
 ### Notes on generation behavior
 - Plateaus have been broadened and flattened compared to earlier shaping.
 - Volcanoes have been widened and can emit smoke from sparse detected vents.
-- Themes can change whether water, trees, and birds are active.
+- Development sites can generate as flat central pads with outbound roads.
+- Town density is configurable from `0` to `100` in the generation dialog.
+- Towns, town roads, and defense sites are distributed procedurally across the world.
+- Themes can change whether trees and birds are active, while surface water is now theme-specific and can also appear on non-life worlds.
 
 ---
 
@@ -316,7 +362,11 @@ The project includes:
 
 ### Theme behavior
 - Earth-like themes can support water, trees, and birds
-- non-life themes disable those systems and render as barren worlds
+- non-life themes disable trees and birds, but can still render themed seas when the selected theme supports surface water
+
+### Current special water/theme behavior
+- Venus renders a deep green sea with large animated bubble columns rising from water areas
+- generated alien themes can render deterministic rich primary-color seas
 
 ### Generated theme notes
 Generated themes are not random at runtime per frame.
@@ -333,15 +383,27 @@ They are deterministic from theme identity and use contrasting HSV-derived color
 
 ### World view
 - forward/horizon-style voxel rendering
+- default Gouraud-shaded terrain in the standard horizon renderer
+- optional alternate voxel horizon renderer on `F7`
 - mouse-look flight
+- orbit camera when driving the truck
 - fog and atmospheric depth
-- world object rendering (ship, trees, oil rigs, smoke, clouds, birds)
+- world object rendering (ship, truck, trees, oil rigs, smoke, clouds, birds, town defenses, Venus bubbles)
 
 ### Flight systems
 - manual altitude control
 - terrain-follow mode
 - collision against terrain and ship footprint
 - custom ship placement relative to the camera
+
+### Ground vehicle systems
+- a truck spawns on a development site when the world is generated
+- the truck is built from one-eighth-size cubes with a long flat bed and scaled cab
+- the truck has four rotating wheels that animate while moving
+- the truck tilts up and down to match terrain slope
+- the truck can drive over normal terrain blocks and stops on larger terrain steps
+- the truck camera moves inward when terrain would clip through the view
+- vehicle control switches between ship and truck with `Tab`
 
 ### Ship positioning
 The ship is rendered just below the center crosshair in world view and recent collision fixes aligned gameplay placement with renderer placement.
@@ -397,12 +459,18 @@ This allows:
 
 ### Current renderer features
 - terrain chunk culling with special handling for steep downward views
+- switchable flat/Gouraud terrain shading in the standard horizon renderer
+- alternate voxel horizon renderer toggle
+- orbit truck camera with mouse-wheel zoom and terrain-aware distance adjustment
 - water surface rendering
 - cloud layers
 - birds
 - ship and engine effects
+- truck rendering with rotating wheels
 - volcano smoke
 - oil rig smoke
+- town defense visuals
+- Venus bubble columns
 - missile and debris rendering
 
 ---
@@ -470,6 +538,8 @@ This is a development utility project and not required to run the main game.
 - some systems are tuned for visual style over simulation accuracy
 - high-altitude straight-down rendering required special chunk coverage logic
 - renderer behavior depends on chunk visibility heuristics and cache invalidation/rebuild cycles
+- the standard horizon renderer and alternate voxel horizon renderer are separate paths and may differ in visual behavior and performance
+- the truck currently uses simple ground-follow movement and visual tilt rather than full wheel-by-wheel suspension or physics
 
 ### Documentation note
 This README describes the current implemented project state and known systems based on the current repository snapshot.
@@ -501,9 +571,14 @@ PETAR-PlanetExplorer currently provides:
 - a large procedural planet flyover prototype
 - customizable terrain generation
 - plan and world views
+- switchable Gouraud/flat shading in the standard horizon view
+- alternate voxel horizon renderer
 - ship flight and collision
+- a drivable truck with orbit camera, terrain tilt, and wheel animation
 - payload deployment and oil rig placement
 - missile-based terrain destruction
+- procedural development sites, towns, roads, and minimap markers
+- theme-specific seas including Venus bubbles and alien water colors
 - multiple deterministic themed planets
 - stylized voxel-column rendering
 
