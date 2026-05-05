@@ -7,7 +7,7 @@ using Microsoft.Xna.Framework.Input;
 using PETAR_PlanetExplorer.Modules.Debug;
 using PETAR_PlanetExplorer.Modules.Maps;
 using PETAR_PlanetExplorer.Modules.UI;
-using VoxelPrototype.Renderer;
+using PETAR_PlanetExplorer.Modules.Voxels;
 
 namespace PETAR_PlanetExplorer
 {
@@ -77,7 +77,8 @@ namespace PETAR_PlanetExplorer
         private Texture2D _heightMapTexture;
         private Texture2D _pixel;
         private HeightMapFlyoverRenderer _horizontalViewRenderer;
-        private VoxelPrototypeRenderer _voxelRenderer;
+        private VoxelRenderer _voxelRenderer;
+        private VoxelWorld _voxelWorld;
         private Point _horizontalViewRenderSize;
         private ProceduralWorldMap _worldMap;
         private Task<(ProceduralWorldMap WorldMap, Color[] ColorMap)> _worldGenerationTask;
@@ -591,7 +592,7 @@ namespace PETAR_PlanetExplorer
                 1f,
                 2000f);
 
-            _voxelRenderer.Render(view, projection, cameraPosition, forward, _worldMap.Seed);
+            _voxelRenderer.Render(_voxelWorld, view, projection, cameraPosition);
         }
 
         private void UpdateMouseLook()
@@ -899,7 +900,7 @@ namespace PETAR_PlanetExplorer
                 var altitudeRatio = MathHelper.Clamp((_flightAltitude - FlightAltitudeMinimum) / (MaxFlightAltitude - FlightAltitudeMinimum), 0f, 1f);
                 var cameraEyeY = MathHelper.Lerp(RenderCameraMinEyeY, RenderCameraMaxEyeY, altitudeRatio);
                 var cameraPosition = new Vector3(_flightPosition.X, cameraEyeY, _flightPosition.Y);
-                _voxelRenderer.RebuildWorld(_worldMap.Seed, cameraPosition);
+                RebuildVoxelWorld();
             }
         }
 
@@ -1312,14 +1313,18 @@ namespace PETAR_PlanetExplorer
                 return;
             }
 
-            _voxelRenderer = new VoxelPrototypeRenderer(GraphicsDevice);
+            _voxelRenderer = new VoxelRenderer(GraphicsDevice);
             if (_worldMap != null)
             {
-                var altitudeRatio = MathHelper.Clamp((_flightAltitude - FlightAltitudeMinimum) / (MaxFlightAltitude - FlightAltitudeMinimum), 0f, 1f);
-                var cameraEyeY = MathHelper.Lerp(RenderCameraMinEyeY, RenderCameraMaxEyeY, altitudeRatio);
-                var cameraPosition = new Vector3(_flightPosition.X, cameraEyeY, _flightPosition.Y);
-                _voxelRenderer.RebuildWorld(_worldMap.Seed, cameraPosition);
+                RebuildVoxelWorld();
             }
+        }
+
+        private void RebuildVoxelWorld()
+        {
+            _voxelWorld = _worldMap == null
+                ? null
+                : VoxelWorldBuilder.CreateFromHeightMap(_worldMap);
         }
 
         private void UpdateWorldGenerationProgress(float progress, string status)

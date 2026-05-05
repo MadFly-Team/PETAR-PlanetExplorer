@@ -9,8 +9,7 @@
       "PETAR-PlanetExplorer/1.0.0": {
         "dependencies": {
           "MonoGame.Framework.DesktopGL": "3.8.4.1",
-          "VoxelPrototype.Core": "1.0.0",
-          "VoxelPrototype.Renderer": "1.0.0"
+          "VoxelPrototype.Core": "1.0.0"
         },
         "runtime": {
           "PETAR-PlanetExplorer.dll": {}
@@ -122,18 +121,6 @@
             "fileVersion": "1.0.0.0"
           }
         }
-      },
-      "VoxelPrototype.Renderer/1.0.0": {
-        "dependencies": {
-          "MonoGame.Framework.DesktopGL": "3.8.4.1",
-          "VoxelPrototype.Core": "1.0.0"
-        },
-        "runtime": {
-          "VoxelPrototype.Renderer.dll": {
-            "assemblyVersion": "1.0.0.0",
-            "fileVersion": "1.0.0.0"
-          }
-        }
       }
     }
   },
@@ -172,11 +159,6 @@
       "hashPath": "nvorbis.0.10.4.nupkg.sha512"
     },
     "VoxelPrototype.Core/1.0.0": {
-      "type": "project",
-      "serviceable": false,
-      "sha512": ""
-    },
-    "VoxelPrototype.Renderer/1.0.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
