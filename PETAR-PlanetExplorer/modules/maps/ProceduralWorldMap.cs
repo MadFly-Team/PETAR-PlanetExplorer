@@ -147,6 +147,11 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             return _developmentSiteBounds;
         }
 
+        public IReadOnlyList<Rectangle> GetTownBounds()
+        {
+            return _townBounds;
+        }
+
         public Vector2 WrapPosition(Vector2 position)
         {
             return new Vector2(WrapCoordinate(position.X, Width), WrapCoordinate(position.Y, Height));
