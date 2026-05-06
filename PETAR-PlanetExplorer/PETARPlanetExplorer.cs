@@ -41,6 +41,8 @@ namespace PETAR_PlanetExplorer
         private const float TruckMaxCruiseSpeed = 18f;
         private const float TruckMaxBoostSpeed = 28f;
         private const float TruckTurnSpeed = 1.4f;
+        private const float TruckTurnAcceleration = 3.2f;
+        private const float TruckTurnDeceleration = 5.4f;
         private const float TruckAcceleration = 26f;
         private const float TruckDeceleration = 20f;
         private const float TruckGroundClearance = 1.8f;
@@ -999,6 +1001,7 @@ namespace PETAR_PlanetExplorer
                 GetTruckGroundY(spawnPosition),
                 0f,
                 0f,
+                0f,
                 0f);
             _truckCameraYaw = _truck.Heading;
             _truckCameraPitch = -0.38f;
@@ -1074,8 +1077,11 @@ namespace PETAR_PlanetExplorer
             var targetSpeed = movementInput * (isBoosting ? TruckMaxBoostSpeed : TruckMaxCruiseSpeed);
             var acceleration = MathF.Abs(targetSpeed) > MathF.Abs(_truck.Speed) ? TruckAcceleration : TruckDeceleration;
             var truckSpeed = AccelerateTowards(_truck.Speed, targetSpeed, acceleration, deltaTime);
-            var turnScale = MathHelper.Clamp(MathF.Abs(truckSpeed) / TruckMaxCruiseSpeed, 0.2f, 1f);
-            var truckHeading = _truck.Heading + (turnInput * TruckTurnSpeed * deltaTime * turnScale);
+            var turnScale = MathHelper.Clamp(MathF.Abs(truckSpeed) / TruckMaxCruiseSpeed, 0.5f, 1f);
+            var targetTurnSpeed = turnInput * TruckTurnSpeed * turnScale;
+            var turnAcceleration = MathF.Abs(targetTurnSpeed) > MathF.Abs(_truck.TurnVelocity) ? TruckTurnAcceleration : TruckTurnDeceleration;
+            var turnVelocity = AccelerateTowards(_truck.TurnVelocity, targetTurnSpeed, turnAcceleration, deltaTime);
+            var truckHeading = _truck.Heading + (turnVelocity * deltaTime);
             var forward = new Vector2(MathF.Cos(truckHeading), MathF.Sin(truckHeading));
             var desiredPosition = _worldMap.WrapPosition(_truck.Position + (forward * truckSpeed * deltaTime));
             var nextPosition = desiredPosition;
@@ -1095,6 +1101,7 @@ namespace PETAR_PlanetExplorer
                 Position = nextPosition,
                 Heading = truckHeading,
                 Speed = truckSpeed,
+                TurnVelocity = turnVelocity,
                 WorldY = desiredGroundY,
                 WheelRotation = _truck.WheelRotation - (traveledDistance * 1.8f),
                 Pitch = MathHelper.Lerp(_truck.Pitch, nextTilt, MathHelper.Clamp(deltaTime * TruckTiltLerpSpeed, 0f, 1f))
@@ -1402,7 +1409,7 @@ namespace PETAR_PlanetExplorer
             Truck
         }
 
-        private readonly record struct TruckState(Vector2 Position, float Heading, float WorldY, float Speed, float WheelRotation, float Pitch);
+        private readonly record struct TruckState(Vector2 Position, float Heading, float WorldY, float Speed, float TurnVelocity, float WheelRotation, float Pitch);
 
     }
 }

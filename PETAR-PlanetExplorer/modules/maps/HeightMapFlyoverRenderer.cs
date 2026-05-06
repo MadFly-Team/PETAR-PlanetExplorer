@@ -75,6 +75,8 @@ namespace PETAR_PlanetExplorer.Modules.Maps
         private ChunkCacheKey[] _visibleChunkKeys;
         private int _activeWaterTimeBucket = int.MinValue;
         private int _nearDetailRefreshCursor;
+        private float _truckCameraAvoidanceLift;
+        private float _truckCameraAvoidanceVelocity;
         private bool _useGouraudShading;
 
         public HeightMapFlyoverRenderer(GraphicsDevice graphicsDevice, int worldWidth, int worldHeight)
@@ -183,11 +185,21 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             var maxDistance = viewState.UseTruckCamera ? 190f : MathHelper.Lerp(180f, 360f, altitudeRatio);
             var viewWidth = viewState.UseTruckCamera ? 156f : MathHelper.Lerp(144f, 320f, altitudeRatio);
             var lookDistance = viewState.UseTruckCamera ? CubeSize * 3.8f : MathHelper.Lerp(92f, 192f, altitudeRatio) * CubeSize;
-            var truckCameraDistance = viewState.UseTruckCamera
-                ? ComputeTruckCameraDistance(worldMap, viewState.Truck, forward3, pitch, viewState.TruckCameraDistance)
-                : viewState.TruckCameraDistance;
+            var truckCameraDistance = viewState.TruckCameraDistance;
+            var targetTruckCameraLift = viewState.UseTruckCamera
+                ? ComputeTruckCameraLift(worldMap, viewState.Truck, forward3, pitch, truckCameraDistance)
+                : 0f;
+            var liftDelta = targetTruckCameraLift - _truckCameraAvoidanceLift;
+            var liftAcceleration = liftDelta * 0.16f;
+            _truckCameraAvoidanceVelocity = (_truckCameraAvoidanceVelocity * 0.78f) + liftAcceleration;
+            _truckCameraAvoidanceLift += _truckCameraAvoidanceVelocity;
+            if (MathF.Abs(liftDelta) < 0.01f && MathF.Abs(_truckCameraAvoidanceVelocity) < 0.01f)
+            {
+                _truckCameraAvoidanceLift = targetTruckCameraLift;
+                _truckCameraAvoidanceVelocity = 0f;
+            }
             var cameraEye = viewState.UseTruckCamera
-                ? new Vector3(-(forward3.X * truckCameraDistance), cameraEyeY - (MathF.Sin(pitch) * truckCameraDistance), -(forward3.Z * truckCameraDistance))
+                ? new Vector3(-(forward3.X * truckCameraDistance), cameraEyeY + _truckCameraAvoidanceLift - (MathF.Sin(pitch) * truckCameraDistance), -(forward3.Z * truckCameraDistance))
                 : new Vector3(0f, cameraEyeY, 18f);
             var lookTarget = viewState.UseTruckCamera
                 ? new Vector3(forward3.X * lookDistance, viewState.Truck.WorldY + CubeHeight * 1.5f, forward3.Z * lookDistance)
@@ -506,11 +518,11 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             DrawMissileEffects();
         }
 
-        private float ComputeTruckCameraDistance(ProceduralWorldMap worldMap, TruckWorldRenderState truck, Vector3 forward3, float pitch, float desiredDistance)
+        private float ComputeTruckCameraLift(ProceduralWorldMap worldMap, TruckWorldRenderState truck, Vector3 forward3, float pitch, float desiredDistance)
         {
             var lookTargetY = truck.WorldY + (CubeHeight * 1.5f);
             var steps = Math.Max(4, (int)MathF.Ceiling(desiredDistance / CubeSize));
-            var safeDistance = desiredDistance;
+            var requiredLift = 0f;
             for (var step = 1; step <= steps; step++)
             {
                 var t = step / (float)steps;
@@ -522,14 +534,14 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                 var terrainOrigin = ProceduralWorldMap.SeaLevel * (worldMap.MaxCubeColumn - 1f);
                 var terrainY = ((terrainColumn - terrainOrigin) * CubeHeight) + FaceOverlap;
                 var clearanceY = MathHelper.Lerp(lookTargetY, sampleY, t);
-                if (terrainY + (CubeHeight * 0.35f) > clearanceY)
+                var blockedHeight = (terrainY + (CubeHeight * 0.35f)) - clearanceY;
+                if (blockedHeight > 0f)
                 {
-                    safeDistance = Math.Max(CubeSize * 1.25f, desiredDistance * Math.Max(0f, (step - 1f) / steps));
-                    break;
+                    requiredLift = MathF.Max(requiredLift, blockedHeight / MathF.Max(0.1f, t));
                 }
             }
 
-            return safeDistance;
+            return requiredLift;
         }
 
         public void Dispose()
@@ -1393,14 +1405,46 @@ namespace PETAR_PlanetExplorer.Modules.Maps
 
         private static void AppendQuad(VoxelChunk chunk, Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, Color color)
         {
-            chunk.AppendTriangle(v0, v1, v2, color);
-            chunk.AppendTriangle(v0, v2, v3, color);
+            AppendSafeTriangle(chunk, v0, v1, v2, color);
+            AppendSafeTriangle(chunk, v0, v2, v3, color);
         }
 
         private static void AppendQuad(VoxelChunk chunk, Vector3 v0, Color c0, Vector3 v1, Color c1, Vector3 v2, Color c2, Vector3 v3, Color c3)
         {
-            chunk.AppendTriangle(v0, c0, v1, c1, v2, c2);
-            chunk.AppendTriangle(v0, c0, v2, c2, v3, c3);
+            AppendSafeTriangle(chunk, v0, c0, v1, c1, v2, c2);
+            AppendSafeTriangle(chunk, v0, c0, v2, c2, v3, c3);
+        }
+
+        private static void AppendSafeTriangle(VoxelChunk chunk, Vector3 a, Vector3 b, Vector3 c, Color color)
+        {
+            if (!IsFinite(a) || !IsFinite(b) || !IsFinite(c) || IsDegenerateTriangle(a, b, c))
+            {
+                return;
+            }
+
+            chunk.AppendTriangle(a, b, c, color);
+        }
+
+        private static void AppendSafeTriangle(VoxelChunk chunk, Vector3 a, Color colorA, Vector3 b, Color colorB, Vector3 c, Color colorC)
+        {
+            if (!IsFinite(a) || !IsFinite(b) || !IsFinite(c) || IsDegenerateTriangle(a, b, c))
+            {
+                return;
+            }
+
+            chunk.AppendTriangle(a, colorA, b, colorB, c, colorC);
+        }
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
+        }
+
+        private static bool IsDegenerateTriangle(Vector3 a, Vector3 b, Vector3 c)
+        {
+            var ab = b - a;
+            var ac = c - a;
+            return Vector3.Cross(ab, ac).LengthSquared() < 0.000001f;
         }
 
         private Color[] GetTopCornerColors(ProceduralWorldMap worldMap, float worldX, float worldY, Color baseColor, bool isShadowed)
