@@ -33,6 +33,7 @@ namespace PETAR_PlanetExplorer.Modules.UI
             _sliderFields =
             [
                 new SliderField("Town Density", GetTownDensitySliderValue(Settings.TownDensity)),
+                new SliderField("Traffic", GetTrafficCountSliderValue(Settings.TrafficCount)),
                 new SliderField("Mountains", Settings.MountainIntensity),
                 new SliderField("Plateaus", Settings.PlateauIntensity),
                 new SliderField("Volcanoes", Settings.VolcanoIntensity),
@@ -64,12 +65,13 @@ namespace PETAR_PlanetExplorer.Modules.UI
             _terrainSlotLabels = NormalizeTerrainSlotLabels(terrainSlotCount, terrainSlotLabels ?? _terrainSlotLabels);
             _themeField.SelectedOption = Settings.Theme;
             _sliderFields[0].Value = GetTownDensitySliderValue(Settings.TownDensity);
-            _sliderFields[1].Value = Settings.MountainIntensity;
-            _sliderFields[2].Value = Settings.PlateauIntensity;
-            _sliderFields[3].Value = Settings.VolcanoIntensity;
-            _sliderFields[4].Value = Settings.CraterIntensity;
-            _sliderFields[5].Value = Settings.GorgeIntensity;
-            _sliderFields[6].Value = GetMaxColumnSliderValue(Settings.MaxCubeColumn);
+            _sliderFields[1].Value = GetTrafficCountSliderValue(Settings.TrafficCount);
+            _sliderFields[2].Value = Settings.MountainIntensity;
+            _sliderFields[3].Value = Settings.PlateauIntensity;
+            _sliderFields[4].Value = Settings.VolcanoIntensity;
+            _sliderFields[5].Value = Settings.CraterIntensity;
+            _sliderFields[6].Value = Settings.GorgeIntensity;
+            _sliderFields[7].Value = GetMaxColumnSliderValue(Settings.MaxCubeColumn);
             _seedText = Settings.Seed.ToString();
             _selectedIndex = 0;
             SelectedTerrainEditSlot = Math.Clamp(activeTerrainSlot, 0, Math.Max(0, terrainSlotCount - 1));
@@ -197,12 +199,13 @@ namespace PETAR_PlanetExplorer.Modules.UI
                 .WithSeed(parsedSeed)
                 .WithTheme(_themeField.SelectedOption)
                 .WithTownDensity(GetTownDensity(_sliderFields[0].Value))
-                .WithMountainIntensity(_sliderFields[1].Value)
-                .WithPlateauIntensity(_sliderFields[2].Value)
-                .WithVolcanoIntensity(_sliderFields[3].Value)
-                .WithCraterIntensity(_sliderFields[4].Value)
-                .WithGorgeIntensity(_sliderFields[5].Value)
-                .WithMaxCubeColumn(GetMaxCubeColumn(_sliderFields[6].Value));
+                .WithTrafficCount(GetTrafficCount(_sliderFields[1].Value))
+                .WithMountainIntensity(_sliderFields[2].Value)
+                .WithPlateauIntensity(_sliderFields[3].Value)
+                .WithVolcanoIntensity(_sliderFields[4].Value)
+                .WithCraterIntensity(_sliderFields[5].Value)
+                .WithGorgeIntensity(_sliderFields[6].Value)
+                .WithMaxCubeColumn(GetMaxCubeColumn(_sliderFields[7].Value));
         }
 
         private DialogResult HandleMouseInput(MouseState mouseState)
@@ -354,6 +357,8 @@ namespace PETAR_PlanetExplorer.Modules.UI
             spriteBatch.DrawString(font, field.Label, new Vector2(x, y), color, 0f, Vector2.Zero, FontScale, SpriteEffects.None, 0f);
             var valueText = field.Label == "Town Density"
                 ? GetTownDensity(field.Value).ToString()
+                : field.Label == "Traffic"
+                    ? GetTrafficCount(field.Value).ToString()
                 : $"{field.Value:0.00}";
             spriteBatch.DrawString(font, valueText, new Vector2(x + SliderLeft, y), color, 0f, Vector2.Zero, FontScale, SpriteEffects.None, 0f);
 
@@ -422,6 +427,18 @@ namespace PETAR_PlanetExplorer.Modules.UI
         {
             var span = WorldGenerationSettings.MaximumTownDensity - WorldGenerationSettings.MinimumTownDensity;
             return WorldGenerationSettings.MinimumTownDensity + (int)MathF.Round(Math.Clamp(sliderValue, 0f, 1f) * span);
+        }
+
+        private static float GetTrafficCountSliderValue(int trafficCount)
+        {
+            return (trafficCount - WorldGenerationSettings.MinimumTrafficCount) /
+                (float)(WorldGenerationSettings.MaximumTrafficCount - WorldGenerationSettings.MinimumTrafficCount);
+        }
+
+        private static int GetTrafficCount(float sliderValue)
+        {
+            var span = WorldGenerationSettings.MaximumTrafficCount - WorldGenerationSettings.MinimumTrafficCount;
+            return WorldGenerationSettings.MinimumTrafficCount + (int)MathF.Round(Math.Clamp(sliderValue, 0f, 1f) * span);
         }
 
         private static bool Pressed(KeyboardState current, KeyboardState previous, Keys key)

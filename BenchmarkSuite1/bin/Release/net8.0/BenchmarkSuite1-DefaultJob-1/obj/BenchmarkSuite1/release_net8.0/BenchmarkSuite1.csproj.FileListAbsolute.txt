@@ -96,7 +96,6 @@ D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuite1\bin\Release\net8
 D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuite1\bin\Release\net8.0\BenchmarkSuite1-DefaultJob-1\bin\Release\net8.0\runtimes\win\lib\net8.0\System.Management.dll
 D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuite1\bin\Release\net8.0\BenchmarkSuite1-DefaultJob-1\bin\Release\net8.0\PETAR-PlanetExplorer.pdb
 D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuite1\bin\Release\net8.0\BenchmarkSuite1-DefaultJob-1\bin\Release\net8.0\VoxelPrototype.Core.pdb
-D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuite1\bin\Release\net8.0\BenchmarkSuite1-DefaultJob-1\bin\Release\net8.0\VoxelPrototype.Renderer.pdb
 D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuite1\bin\Release\net8.0\BenchmarkSuite1-DefaultJob-1\obj\BenchmarkSuite1\release_net8.0\BenchmarkSuite1.csproj.AssemblyReference.cache
 D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuite1\bin\Release\net8.0\BenchmarkSuite1-DefaultJob-1\obj\BenchmarkSuite1\release_net8.0\BenchmarkSuite1.GeneratedMSBuildEditorConfig.editorconfig
 D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuite1\bin\Release\net8.0\BenchmarkSuite1-DefaultJob-1\obj\BenchmarkSuite1\release_net8.0\BenchmarkSuite1.AssemblyInfoInputs.cache

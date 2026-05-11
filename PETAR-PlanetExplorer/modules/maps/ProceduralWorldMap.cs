@@ -44,6 +44,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
         private List<Vector2> _developmentSiteCenters;
         private List<Rectangle> _developmentSiteBounds;
         private List<Rectangle> _townBounds;
+        private List<TownTrafficLinkInfo> _townTrafficLinks;
 
         public ProceduralWorldMap(int width, int height, int seed, Action<float, string> progressCallback = null)
             : this(width, height, seed, WorldGenerationSettings.Default, progressCallback)
@@ -91,6 +92,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             _developmentSiteCenters = new List<Vector2>();
             _developmentSiteBounds = new List<Rectangle>();
             _townBounds = new List<Rectangle>();
+            _townTrafficLinks = new List<TownTrafficLinkInfo>();
 
             Generate(progressCallback);
         }
@@ -152,9 +154,151 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             return _townBounds;
         }
 
+        public IReadOnlyList<TownTrafficLinkInfo> GetTownTrafficLinks()
+        {
+            return _townTrafficLinks;
+        }
+
         public Vector2 WrapPosition(Vector2 position)
         {
             return new Vector2(WrapCoordinate(position.X, Width), WrapCoordinate(position.Y, Height));
+        }
+
+        public bool TryFindNearestRoadCenter(Vector2 position, int searchRadius, out Vector2 roadCenter)
+        {
+            var centerX = WrapGridCoordinate((int)MathF.Round(position.X), Width);
+            var centerY = WrapGridCoordinate((int)MathF.Round(position.Y), Height);
+            var bestDistanceSquared = float.MaxValue;
+            var bestRoadCenter = Vector2.Zero;
+            var found = false;
+
+            for (var offsetY = -searchRadius; offsetY <= searchRadius; offsetY++)
+            {
+                for (var offsetX = -searchRadius; offsetX <= searchRadius; offsetX++)
+                {
+                    var sampleX = WrapGridCoordinate(centerX + offsetX, Width);
+                    var sampleY = WrapGridCoordinate(centerY + offsetY, Height);
+                    if (!IsRoadCenterFeature(_featureData[GetIndex(sampleX, sampleY)]))
+                    {
+                        continue;
+                    }
+
+                    var delta = GetWrappedOffset(new Vector2(sampleX + 0.5f, sampleY + 0.5f) - position);
+                    var distanceSquared = delta.LengthSquared();
+                    if (distanceSquared >= bestDistanceSquared)
+                    {
+                        continue;
+                    }
+
+                    bestDistanceSquared = distanceSquared;
+                    bestRoadCenter = WrapPosition(position + delta);
+                    found = true;
+                }
+            }
+
+            roadCenter = bestRoadCenter;
+            return found;
+        }
+
+        public bool TryFindRoadCenterAlongDirection(Vector2 position, int direction, int forwardSearchDistance, int lateralSearchRadius, out Vector2 roadCenter)
+        {
+            var centerX = WrapGridCoordinate((int)MathF.Round(position.X), Width);
+            var centerY = WrapGridCoordinate((int)MathF.Round(position.Y), Height);
+            var alongAxisVertical = (direction & 1) == 0;
+            var stepX = direction switch
+            {
+                1 => 1,
+                3 => -1,
+                _ => 0
+            };
+            var stepY = direction switch
+            {
+                0 => -1,
+                2 => 1,
+                _ => 0
+            };
+
+            for (var forwardStep = 0; forwardStep <= forwardSearchDistance; forwardStep++)
+            {
+                var baseX = WrapGridCoordinate(centerX + (stepX * forwardStep), Width);
+                var baseY = WrapGridCoordinate(centerY + (stepY * forwardStep), Height);
+                for (var lateralDistance = 0; lateralDistance <= lateralSearchRadius; lateralDistance++)
+                {
+                    if (TryGetRoadCenterAtDirectionalOffset(baseX, baseY, alongAxisVertical, lateralDistance, out roadCenter) ||
+                        (lateralDistance > 0 && TryGetRoadCenterAtDirectionalOffset(baseX, baseY, alongAxisVertical, -lateralDistance, out roadCenter)))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            roadCenter = Vector2.Zero;
+            return false;
+        }
+
+        public bool TryBuildRoadCenterPath(Vector2 start, Vector2 end, int maxSearchDistance, out List<Vector2> waypoints)
+        {
+            waypoints = null;
+            var startX = WrapGridCoordinate((int)MathF.Floor(start.X), Width);
+            var startY = WrapGridCoordinate((int)MathF.Floor(start.Y), Height);
+            var endX = WrapGridCoordinate((int)MathF.Floor(end.X), Width);
+            var endY = WrapGridCoordinate((int)MathF.Floor(end.Y), Height);
+            var startIndex = GetIndex(startX, startY);
+            var endIndex = GetIndex(endX, endY);
+            var frontier = new Queue<int>();
+            var visited = new HashSet<int> { startIndex };
+            var cameFrom = new Dictionary<int, int>();
+            frontier.Enqueue(startIndex);
+
+            while (frontier.Count > 0)
+            {
+                var currentIndex = frontier.Dequeue();
+                if (currentIndex == endIndex)
+                {
+                    waypoints = ReconstructRoadCenterPath(cameFrom, endIndex);
+                    return true;
+                }
+
+                var currentX = currentIndex % Width;
+                var currentY = currentIndex / Width;
+                for (var direction = 0; direction < 4; direction++)
+                {
+                    var nextX = direction switch
+                    {
+                        0 => currentX,
+                        1 => currentX + 1,
+                        2 => currentX,
+                        _ => currentX - 1
+                    };
+                    var nextY = direction switch
+                    {
+                        0 => currentY - 1,
+                        1 => currentY,
+                        2 => currentY + 1,
+                        _ => currentY
+                    };
+
+                    nextX = WrapGridCoordinate(nextX, Width);
+                    nextY = WrapGridCoordinate(nextY, Height);
+                    var nextIndex = GetIndex(nextX, nextY);
+                    if (visited.Contains(nextIndex) || !IsRoadCenterFeature(_featureData[nextIndex]))
+                    {
+                        continue;
+                    }
+
+                    var distanceFromStart = GetWrappedOffset(new Vector2(nextX + 0.5f, nextY + 0.5f) - start).Length();
+                    if (distanceFromStart > maxSearchDistance)
+                    {
+                        continue;
+                    }
+
+                    visited.Add(nextIndex);
+                    cameFrom[nextIndex] = currentIndex;
+                    frontier.Enqueue(nextIndex);
+                }
+            }
+
+            return false;
         }
 
         public Color[] CreateColorMap(Action<float, string> progressCallback = null)
@@ -459,6 +603,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
         private void GenerateDistributedTownNetwork(Action<float, string> progressCallback)
         {
             _townBounds.Clear();
+            _townTrafficLinks.Clear();
             var densityRatio = (_settings.TownDensity - WorldGenerationSettings.MinimumTownDensity) /
                 (float)(WorldGenerationSettings.MaximumTownDensity - WorldGenerationSettings.MinimumTownDensity);
             var targetTownCount = (int)MathF.Round(MathHelper.Lerp(0f, 140f, densityRatio));
@@ -679,18 +824,33 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                 for (var candidateIndex = 0; candidateIndex < candidates.Count && connectionsCreated < TownRoadConnectionCount; candidateIndex++)
                 {
                     var candidate = candidates[candidateIndex];
+                    var connectionKey = 0L;
                     if (candidate.TargetTownIndex >= 0)
                     {
-                        var connectionKey = GetTownConnectionKey(townIndex, candidate.TargetTownIndex);
-                        if (!usedConnections.Add(connectionKey))
+                        connectionKey = GetTownConnectionKey(townIndex, candidate.TargetTownIndex);
+                        if (usedConnections.Contains(connectionKey))
                         {
                             continue;
                         }
                     }
 
-                    if (TryCarveTownConnection(_townBounds[townIndex], candidate.Target, targetHeight))
+                    var sourceDirection = GetDirectionToward(_townBounds[townIndex], candidate.Target);
+                    var targetBounds = candidate.TargetTownIndex >= 0
+                        ? _townBounds[candidate.TargetTownIndex]
+                        : default(Rectangle?);
+                    if (TryCarveTownConnection(_townBounds[townIndex], targetBounds, candidate.Target, targetHeight, out var sourceRoadCenter, out var targetRoadCenter, out var connectionPath))
                     {
                         connectionsCreated++;
+                        if (candidate.TargetTownIndex >= 0)
+                        {
+                            connectionPath = TrimConnectionPath(connectionPath, sourceRoadCenter, targetRoadCenter);
+                            usedConnections.Add(connectionKey);
+                            var targetDirection = GetDirectionToward(_townBounds[candidate.TargetTownIndex], GetBoundsCenter(_townBounds[townIndex]));
+                            _townTrafficLinks.Add(new TownTrafficLinkInfo(townIndex, sourceDirection, candidate.TargetTownIndex, targetDirection, sourceRoadCenter, targetRoadCenter, connectionPath));
+                            var reversePath = new List<Vector2>(connectionPath);
+                            reversePath.Reverse();
+                            _townTrafficLinks.Add(new TownTrafficLinkInfo(candidate.TargetTownIndex, targetDirection, townIndex, sourceDirection, targetRoadCenter, sourceRoadCenter, reversePath));
+                        }
                     }
                 }
             }
@@ -726,21 +886,56 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             return candidates;
         }
 
-        private bool TryCarveTownConnection(Rectangle bounds, Point target, float targetHeight)
+        private bool TryCarveTownConnection(Rectangle bounds, Rectangle? targetBounds, Point target, float targetHeight, out Vector2 sourceRoadCenter, out Vector2 targetRoadCenter, out List<Vector2> connectionPath)
         {
             var current = GetRoadStart(bounds, GetDirectionToward(bounds, target), new Random(Seed ^ (target.X * 397) ^ (target.Y * 7919)));
+            Point? firstRoadPointOutsideSource = null;
+            var firstRoadDirectionOutsideSource = -1;
+            Point? lastRoadPointInsideSource = null;
+            var lastRoadDirectionInsideSource = -1;
+            Point? lastRoadPointOutsideTarget = null;
+            var lastRoadDirectionOutsideTarget = -1;
+            connectionPath = new List<Vector2>();
             var maxSteps = Width + Height;
             for (var steps = 0; steps < maxSteps; steps++)
             {
-                if (!IsInsideMap(current) || IsNearDevelopmentAreaOrRoad(current, TownDevelopmentExclusionRadius))
+                if (!IsInsideMap(current) || IsBlockedTownConnectionCell(current, bounds, targetBounds, target))
                 {
+                    sourceRoadCenter = Vector2.Zero;
+                    targetRoadCenter = Vector2.Zero;
+                    connectionPath = new List<Vector2>();
                     return false;
                 }
 
-                var direction = GetDirectionToward(current, target);
+                var direction = GetTownConnectionStepDirection(current, target);
                 CarveRoadCell(current.X, current.Y, targetHeight, direction, isTownRoad: true);
+                if (bounds.Contains(current))
+                {
+                    lastRoadPointInsideSource = current;
+                    lastRoadDirectionInsideSource = direction;
+                }
+                else if (!firstRoadPointOutsideSource.HasValue)
+                {
+                    firstRoadPointOutsideSource = current;
+                    firstRoadDirectionOutsideSource = direction;
+                }
+
+                connectionPath.Add(GetCellCenterPosition(current));
+                if (!targetBounds.HasValue || !targetBounds.Value.Contains(current))
+                {
+                    lastRoadPointOutsideTarget = current;
+                    lastRoadDirectionOutsideTarget = direction;
+                }
+
                 if (Math.Abs(current.X - target.X) <= 1 && Math.Abs(current.Y - target.Y) <= 1)
                 {
+                    var resolvedSourcePoint = firstRoadPointOutsideSource ?? lastRoadPointInsideSource ?? current;
+                    var resolvedSourceDirection = firstRoadDirectionOutsideSource >= 0
+                        ? firstRoadDirectionOutsideSource
+                        : (lastRoadDirectionInsideSource >= 0 ? lastRoadDirectionInsideSource : direction);
+                    sourceRoadCenter = GetCarvedRoadCenterPosition(resolvedSourcePoint, resolvedSourceDirection);
+                    var resolvedTargetPoint = lastRoadPointOutsideTarget ?? current;
+                    targetRoadCenter = GetCarvedRoadCenterPosition(resolvedTargetPoint, lastRoadDirectionOutsideTarget >= 0 ? lastRoadDirectionOutsideTarget : direction);
                     return true;
                 }
 
@@ -756,7 +951,113 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                 }
             }
 
+            sourceRoadCenter = Vector2.Zero;
+            targetRoadCenter = Vector2.Zero;
+            connectionPath = new List<Vector2>();
             return false;
+        }
+
+        private static int GetTownConnectionStepDirection(Point current, Point target)
+        {
+            var deltaX = target.X - current.X;
+            var deltaY = target.Y - current.Y;
+            if (Math.Abs(deltaX) >= Math.Abs(deltaY))
+            {
+                return deltaX >= 0 ? 1 : 3;
+            }
+
+            return deltaY >= 0 ? 2 : 0;
+        }
+
+        private static Vector2 GetCarvedRoadCenterPosition(Point roadCell, int direction)
+        {
+            var alongAxisVertical = (direction & 1) == 0;
+            return alongAxisVertical
+                ? new Vector2(roadCell.X - 0.5f, roadCell.Y + 0.5f)
+                : new Vector2(roadCell.X + 0.5f, roadCell.Y - 0.5f);
+        }
+
+        private static Vector2 GetCellCenterPosition(Point cell)
+        {
+            return new Vector2(cell.X + 0.5f, cell.Y + 0.5f);
+        }
+
+        private static List<Vector2> TrimConnectionPath(IReadOnlyList<Vector2> connectionPath, Vector2 sourceRoadCenter, Vector2 targetRoadCenter)
+        {
+            if (connectionPath == null || connectionPath.Count == 0)
+            {
+                return new List<Vector2>();
+            }
+
+            if (sourceRoadCenter == Vector2.Zero || targetRoadCenter == Vector2.Zero)
+            {
+                return new List<Vector2>(connectionPath);
+            }
+
+            var startIndex = FindNearestPathIndex(connectionPath, sourceRoadCenter);
+            var endIndex = FindNearestPathIndex(connectionPath, targetRoadCenter);
+            if (startIndex > endIndex)
+            {
+                (startIndex, endIndex) = (endIndex, startIndex);
+            }
+
+            var trimmedPath = new List<Vector2>((endIndex - startIndex) + 3)
+            {
+                sourceRoadCenter
+            };
+
+            for (var pathIndex = startIndex; pathIndex <= endIndex; pathIndex++)
+            {
+                var waypoint = connectionPath[pathIndex];
+                if (trimmedPath.Count > 0 && Vector2.DistanceSquared(trimmedPath[^1], waypoint) <= 0.01f)
+                {
+                    continue;
+                }
+
+                trimmedPath.Add(waypoint);
+            }
+
+            if (trimmedPath.Count == 0 || Vector2.DistanceSquared(trimmedPath[^1], targetRoadCenter) > 0.01f)
+            {
+                trimmedPath.Add(targetRoadCenter);
+            }
+
+            return trimmedPath;
+        }
+
+        private static int FindNearestPathIndex(IReadOnlyList<Vector2> connectionPath, Vector2 target)
+        {
+            var bestIndex = 0;
+            var bestDistanceSquared = float.MaxValue;
+            for (var index = 0; index < connectionPath.Count; index++)
+            {
+                var distanceSquared = Vector2.DistanceSquared(connectionPath[index], target);
+                if (distanceSquared < bestDistanceSquared)
+                {
+                    bestDistanceSquared = distanceSquared;
+                    bestIndex = index;
+                }
+            }
+
+            return bestIndex;
+        }
+
+        private bool IsBlockedTownConnectionCell(Point current, Rectangle sourceBounds, Rectangle? targetBounds, Point target)
+        {
+            if (sourceBounds.Contains(current) ||
+                (targetBounds.HasValue && targetBounds.Value.Contains(current)) ||
+                Math.Abs(current.X - target.X) <= 1 && Math.Abs(current.Y - target.Y) <= 1)
+            {
+                return false;
+            }
+
+            var feature = _featureData[GetIndex(current.X, current.Y)];
+            return feature == FeatureDevelopment ||
+                feature == FeatureDevelopmentRoad ||
+                feature == FeatureDevelopmentRoadCenter ||
+                feature == FeatureTown ||
+                feature == FeatureTownRoad ||
+                feature == FeatureTownRoadCenter;
         }
 
         private static long GetTownConnectionKey(int firstTownIndex, int secondTownIndex)
@@ -1347,6 +1648,71 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             return wrapped < 0 ? wrapped + size : wrapped;
         }
 
+        private List<Vector2> ReconstructRoadCenterPath(Dictionary<int, int> cameFrom, int endIndex)
+        {
+            var indices = new List<int> { endIndex };
+            var currentIndex = endIndex;
+            while (cameFrom.TryGetValue(currentIndex, out var previousIndex))
+            {
+                indices.Add(previousIndex);
+                currentIndex = previousIndex;
+            }
+
+            indices.Reverse();
+            var waypoints = new List<Vector2>(indices.Count);
+            for (var index = 0; index < indices.Count; index++)
+            {
+                var cellIndex = indices[index];
+                var x = cellIndex % Width;
+                var y = cellIndex / Width;
+                waypoints.Add(new Vector2(x + 0.5f, y + 0.5f));
+            }
+
+            return waypoints;
+        }
+
+        private bool TryGetRoadCenterAtDirectionalOffset(int baseX, int baseY, bool alongAxisVertical, int lateralOffset, out Vector2 roadCenter)
+        {
+            var sampleX = alongAxisVertical ? WrapGridCoordinate(baseX + lateralOffset, Width) : baseX;
+            var sampleY = alongAxisVertical ? baseY : WrapGridCoordinate(baseY + lateralOffset, Height);
+            if (IsRoadCenterFeature(_featureData[GetIndex(sampleX, sampleY)]))
+            {
+                roadCenter = new Vector2(sampleX + 0.5f, sampleY + 0.5f);
+                return true;
+            }
+
+            roadCenter = Vector2.Zero;
+            return false;
+        }
+
+        private Vector2 GetWrappedOffset(Vector2 offset)
+        {
+            if (offset.X > Width * 0.5f)
+            {
+                offset.X -= Width;
+            }
+            else if (offset.X < -Width * 0.5f)
+            {
+                offset.X += Width;
+            }
+
+            if (offset.Y > Height * 0.5f)
+            {
+                offset.Y -= Height;
+            }
+            else if (offset.Y < -Height * 0.5f)
+            {
+                offset.Y += Height;
+            }
+
+            return offset;
+        }
+
+        private static bool IsRoadCenterFeature(byte featureType)
+        {
+            return featureType == FeatureTownRoadCenter || featureType == FeatureDevelopmentRoadCenter;
+        }
+
         private bool TraceRiver(int startX, int startY)
         {
             var visited = new HashSet<int>();
@@ -1674,6 +2040,8 @@ namespace PETAR_PlanetExplorer.Modules.Maps
 
             public Vector2 FacingDirection { get; }
         }
+
+        public readonly record struct TownTrafficLinkInfo(int SourceTownIndex, int SourceDirection, int TargetTownIndex, int TargetDirection, Vector2 SourceRoadCenter, Vector2 TargetRoadCenter, IReadOnlyList<Vector2> ConnectionPath);
 
         private readonly record struct TownRoadConnectionCandidate(int TargetTownIndex, Point Target, int Score);
 

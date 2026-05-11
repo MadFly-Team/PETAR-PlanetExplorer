@@ -47,6 +47,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                     preset.GorgeIntensity,
                     preset.MaxCubeColumn,
                     preset.TownDensity,
+                    preset.TrafficCount,
                     preset.TreeCount);
                 terrainEditSlot = Math.Max(0, preset.TerrainEditSlot);
                 return true;
@@ -82,6 +83,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                 GorgeIntensity = settings.GorgeIntensity,
                 MaxCubeColumn = settings.MaxCubeColumn,
                 TownDensity = settings.TownDensity,
+                TrafficCount = settings.TrafficCount,
                 TreeCount = settings.TreeCount,
                 TerrainEditSlot = Math.Max(0, terrainEditSlot)
             };
@@ -108,6 +110,8 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             public int MaxCubeColumn { get; set; }
 
             public int TownDensity { get; set; } = WorldGenerationSettings.DefaultTownDensity;
+
+            public int TrafficCount { get; set; } = WorldGenerationSettings.DefaultTrafficCount;
 
             public int TreeCount { get; set; }
 

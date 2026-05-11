@@ -67,12 +67,48 @@ namespace PETAR_PlanetExplorer
         private const float MaxCruiseSpeed = 72f;
         private const float MaxBoostSpeed = 180f;
         private const float MaxTurnSpeed = 0.8f;
-        private const float MovementAcceleration = 220f;
+        private const float ShipInitialMovementAcceleration = 18f;
+        private const float ShipMaxMovementAcceleration = 64f;
+        private const float ShipMovementDeceleration = 42f;
         private const float TurnAcceleration = 2.6f;
-        private const float VerticalAcceleration = MovementAcceleration;
+        private const float VerticalAcceleration = 220f;
         private const float MouseLookSensitivity = 0.0032f;
         private const float MaxLookPitch = MathHelper.PiOver2;
+        private const int TrafficCarsPerTown = 10;
+        private const int TrafficRouteChoiceCount = 4;
+        private const float TrafficRoadWidthWorld = 12f;
+        private const float TrafficHoverHeight = 5.2f;
+        private const float TrafficHoverBobAmplitude = 0.18f;
+        private const float TrafficHoverBobSpeed = 1.8f;
+        private const float TrafficSpeedMin = 10f;
+        private const float TrafficSpeedMax = 16f;
+        private const float TrafficBankResponse = 3.2f;
+        private const float TrafficBankLimit = 0.42f;
+        private const float TrafficPitchResponse = 2.8f;
+        private const float TrafficPitchLimit = 0.24f;
+        private const int TrafficRoadSearchRadius = 96;
+        private const int TrafficRoadPathSearchDistance = 4096;
+        private const int TrafficDirectionalRoadForwardSearch = 40;
+        private const int TrafficDirectionalRoadLateralSearch = 6;
+        private const float TrafficRenderDistance = 220f;
+        private const float TrafficHeightSmoothingResponse = 2.4f;
+        private const float TrafficRouteSimplificationTolerance = 0.8f;
+        private const float TrafficMinimumSectionLength = 2f;
         private const int TerrainEditSlotCount = 3;
+        private const int FogOfWarCellSize = 32;
+        private const int FogOfWarRevealRadiusCells = 5;
+        private static readonly Color UnexploredFogColor = new Color(2, 6, 16, 220);
+        private static readonly Color[] TrafficColorPalette =
+        {
+            new Color(240, 242, 246),
+            new Color(92, 210, 255),
+            new Color(255, 132, 132),
+            new Color(255, 214, 102),
+            new Color(148, 255, 176),
+            new Color(190, 156, 255),
+            new Color(255, 170, 224),
+            new Color(255, 146, 88)
+        };
         private GraphicsDeviceManager _graphics;
         private SpriteBatch _spriteBatch;
         private SpriteFont _spaceFont;
@@ -117,13 +153,21 @@ namespace PETAR_PlanetExplorer
         private FallingPayloadState _fallingPayload;
         private readonly List<HeightMapFlyoverRenderer.OilPlatformInstance> _oilPlatforms = new();
         private readonly List<HeightMapFlyoverRenderer.MissileDebrisParticle> _missileDebris = new();
+        private readonly List<TrafficCarState> _trafficCars = new();
+        private readonly List<Vector2> _trafficTownCenters = new();
+        private readonly List<List<TrafficRouteLink>> _trafficTownRouteOptions = new();
         private readonly List<TerrainEditRecord> _terrainEditRecords = new();
+        private readonly List<TrafficCarState> _debugTrafficCars = new();
+        private int _activeDebugTrafficCarIndex;
+        private bool[] _exploredMapCells;
+        private Point _exploredMapSize;
         private string[] _terrainSlotLabels = CreateDefaultTerrainSlotLabels();
         private MissileState? _activeMissile;
         private TruckState _truck;
         private float _truckCameraYaw;
         private float _truckCameraPitch = -0.38f;
         private float _truckCameraDistance = TruckCameraDistanceDefault;
+        private Random _trafficRandom;
 
         public PETARPlanetExplorer()
         {
@@ -200,10 +244,17 @@ namespace PETAR_PlanetExplorer
 
             if (keyboardState.IsKeyDown(Keys.F11) && !_previousKeyboardState.IsKeyDown(Keys.F11))
             {
-                _usePlanView = !_usePlanView;
-                IsMouseVisible = _usePlanView;
-                _mouseLookInitialized = false;
-                DebugLogger.Info($"View mode toggled. Plan view enabled: {_usePlanView}.");
+                if (_worldGenerationTask != null || _worldMap == null || _heightMapTexture == null)
+                {
+                    DebugLogger.Info("Ignored F11 view toggle while world generation is still in progress.");
+                }
+                else
+                {
+                    _usePlanView = !_usePlanView;
+                    IsMouseVisible = _usePlanView;
+                    _mouseLookInitialized = false;
+                    DebugLogger.Info($"View mode toggled. Plan view enabled: {_usePlanView}.");
+                }
             }
 
             if (keyboardState.IsKeyDown(Keys.F10) && !_previousKeyboardState.IsKeyDown(Keys.F10) && _worldGenerationTask == null)
@@ -248,11 +299,24 @@ namespace PETAR_PlanetExplorer
 
             if (keyboardState.IsKeyDown(Keys.Tab) && !_previousKeyboardState.IsKeyDown(Keys.Tab) && _worldGenerationTask == null && _worldMap != null)
             {
-                _activeVehicleMode = _activeVehicleMode == ActiveVehicleMode.Ship
-                    ? ActiveVehicleMode.Truck
-                    : ActiveVehicleMode.Ship;
+                _activeVehicleMode = _activeVehicleMode switch
+                {
+                    ActiveVehicleMode.Ship => ActiveVehicleMode.Truck,
+                    ActiveVehicleMode.Truck => ActiveVehicleMode.DebugTraffic,
+                    _ => ActiveVehicleMode.Ship
+                };
                 _mouseLookInitialized = false;
                 DebugLogger.Info($"Active vehicle switched to {_activeVehicleMode}.");
+            }
+
+            if (_activeVehicleMode == ActiveVehicleMode.DebugTraffic &&
+                (keyboardState.IsKeyDown(Keys.LeftControl) || keyboardState.IsKeyDown(Keys.RightControl)) &&
+                !(_previousKeyboardState.IsKeyDown(Keys.LeftControl) || _previousKeyboardState.IsKeyDown(Keys.RightControl)) &&
+                _debugTrafficCars.Count > 1)
+            {
+                _activeDebugTrafficCarIndex = (_activeDebugTrafficCarIndex + 1) % _debugTrafficCars.Count;
+                _mouseLookInitialized = false;
+                DebugLogger.Info($"Active debug traffic car switched to {_activeDebugTrafficCarIndex + 1}/{_debugTrafficCars.Count}.");
             }
 
             if (_generationDialog != null && _generationDialog.IsOpen)
@@ -288,7 +352,7 @@ namespace PETAR_PlanetExplorer
                 return;
             }
 
-            IsMouseVisible = _usePlanView;
+            IsMouseVisible = _usePlanView || _worldGenerationTask != null || _worldMap == null;
 
             if (keyboardState.IsKeyDown(Keys.F9) && !_previousKeyboardState.IsKeyDown(Keys.F9) && _worldMap != null)
             {
@@ -325,6 +389,8 @@ namespace PETAR_PlanetExplorer
                 base.Update(gameTime);
                 return;
             }
+
+            RevealFogOfWarAroundActiveVehicle();
 
             if (!_usePlanView)
             {
@@ -395,7 +461,14 @@ namespace PETAR_PlanetExplorer
                 }
 
                 var targetForwardSpeed = movementInput * (isBoosting ? MaxBoostSpeed : MaxCruiseSpeed);
-                _forwardVelocity = AccelerateTowards(_forwardVelocity, targetForwardSpeed, MovementAcceleration, deltaTime);
+                var targetSpeedMagnitude = MathF.Abs(targetForwardSpeed);
+                var currentSpeedRatio = targetSpeedMagnitude > 0.001f
+                    ? MathHelper.Clamp(MathF.Abs(_forwardVelocity) / targetSpeedMagnitude, 0f, 1f)
+                    : 0f;
+                var forwardAcceleration = Math.Abs(movementInput) > 0.01f
+                    ? MathHelper.Lerp(ShipInitialMovementAcceleration, ShipMaxMovementAcceleration, currentSpeedRatio)
+                    : ShipMovementDeceleration;
+                _forwardVelocity = AccelerateTowards(_forwardVelocity, targetForwardSpeed, forwardAcceleration, deltaTime);
                 _turnVelocity = AccelerateTowards(_turnVelocity, turnInput * MaxTurnSpeed, TurnAcceleration, deltaTime);
                 _flightHeading += _turnVelocity * deltaTime;
                 var lookDirection = GetLookDirection();
@@ -431,11 +504,13 @@ namespace PETAR_PlanetExplorer
                         _flightAltitude = MathHelper.Clamp(_flightAltitude + altitudeDelta, GetMinimumFlightAltitude(_flightPosition, lookDirection), MaxFlightAltitude);
                     }
                 }
+
             }
 
             UpdateFallingPayload(deltaTime);
             UpdateMissile(deltaTime);
             UpdateMissileDebris(deltaTime);
+            UpdateTraffic(deltaTime);
 
             _previousKeyboardState = keyboardState;
             _previousMouseState = mouseState;
@@ -474,7 +549,6 @@ namespace PETAR_PlanetExplorer
                 return;
             }
 
-            var minimapRectangle = new Rectangle(24, 24, 180, 180);
             var title = "PROCEDURAL PLANET FLYOVER";
             var titleOrigin = _spaceFont.MeasureString(title) * 0.5f;
             var titlePosition = new Vector2(center.X, 24f);
@@ -482,13 +556,40 @@ namespace PETAR_PlanetExplorer
             var flightModeText = _terrainFollowMode ? "Terrain follow" : "Manual altitude";
             var payloadStatus = _fallingPayloadActive ? "Payload dropping" : (_payloadReleased ? "Platform deployed" : "Payload attached");
             var rendererText = _usePlanView ? "Map" : (_useVoxelHorizontalRenderer ? "Voxel horizon" : "Standard horizon");
-            var vehicleText = _activeVehicleMode == ActiveVehicleMode.Truck ? "Truck" : "Ship";
+            var vehicleText = _activeVehicleMode switch
+            {
+                ActiveVehicleMode.Truck => "Truck",
+                ActiveVehicleMode.DebugTraffic => "Traffic",
+                _ => "Ship"
+            };
             var shadingText = _useGouraudHorizontalShading ? "Gouraud horizon" : "Flat horizon";
-            var controlsText = $"Seed {_worldMap.Seed} // Theme {_worldMap.Theme.DisplayName} // {GetActiveTerrainSlotDisplayName()} // Vehicle {vehicleText} // TAB switch vehicle // F8 custom world // F11 {viewText} view // F7 {rendererText} // F10 regenerate // F5 cycle edit slot // F6 {shadingText} // F9 {flightModeText} // Mouse look ship // Mouse orbit truck // Wheel zoom truck // W/S move // Q/E or Space/Ctrl or R/F altitude ship // A/D turn // Shift boost // P release payload // Heading {MathHelper.ToDegrees(_activeVehicleMode == ActiveVehicleMode.Truck ? _truck.Heading : _flightHeading):000} deg";
+            var activeDebugTrafficCar = GetActiveDebugTrafficCar();
+            var activeHeading = _activeVehicleMode switch
+            {
+                ActiveVehicleMode.Truck => _truck.Heading,
+                ActiveVehicleMode.DebugTraffic when activeDebugTrafficCar.HasValue => activeDebugTrafficCar.Value.Heading,
+                _ => _flightHeading
+            };
+            var controlsText = $"Seed {_worldMap.Seed} // Theme {_worldMap.Theme.DisplayName} // {GetActiveTerrainSlotDisplayName()} // Vehicle {vehicleText} // TAB switch vehicle // Ctrl switch traffic car // F8 custom world // F11 {viewText} view // F7 {rendererText} // F10 regenerate // F5 cycle edit slot // F6 {shadingText} // F9 {flightModeText} // Mouse look ship // Mouse orbit truck // Wheel zoom truck // W/S move // Q/E or Space/Ctrl or R/F altitude ship // A/D turn // Shift boost // P release payload // Heading {MathHelper.ToDegrees(activeHeading):000} deg";
             var controlsOrigin = _spaceFont.MeasureString(controlsText) * 0.5f;
-            var statusPosition = _activeVehicleMode == ActiveVehicleMode.Truck ? _truck.Position : _flightPosition;
-            var statusAltitudeText = _activeVehicleMode == ActiveVehicleMode.Truck ? _truck.WorldY.ToString("0.00") : _flightAltitude.ToString("0.00");
-            var statusPitch = _activeVehicleMode == ActiveVehicleMode.Truck ? 0f : MathHelper.ToDegrees(_flightPitch);
+            var statusPosition = _activeVehicleMode switch
+            {
+                ActiveVehicleMode.Truck => _truck.Position,
+                ActiveVehicleMode.DebugTraffic when activeDebugTrafficCar.HasValue => activeDebugTrafficCar.Value.Position,
+                _ => _flightPosition
+            };
+            var statusAltitudeText = _activeVehicleMode switch
+            {
+                ActiveVehicleMode.Truck => _truck.WorldY.ToString("0.00"),
+                ActiveVehicleMode.DebugTraffic when activeDebugTrafficCar.HasValue => activeDebugTrafficCar.Value.WorldY.ToString("0.00"),
+                _ => _flightAltitude.ToString("0.00")
+            };
+            var statusPitch = _activeVehicleMode switch
+            {
+                ActiveVehicleMode.Truck => 0f,
+                ActiveVehicleMode.DebugTraffic when activeDebugTrafficCar.HasValue => MathHelper.ToDegrees(activeDebugTrafficCar.Value.Pitch),
+                _ => MathHelper.ToDegrees(_flightPitch)
+            };
             var altitudeText = $"Height {statusAltitudeText} // Pitch {statusPitch:000} deg // Position {statusPosition.X:0000}, {statusPosition.Y:0000} // Vehicle {vehicleText} // Mode {flightModeText} // {payloadStatus}";
 
             if (_usePlanView)
@@ -506,7 +607,6 @@ namespace PETAR_PlanetExplorer
                 _pixel,
                 viewport,
                 new FlyoverHudModel(
-                    minimapRectangle,
                     title,
                     titlePosition,
                     titleOrigin,
@@ -514,20 +614,15 @@ namespace PETAR_PlanetExplorer
                     new Vector2(center.X, viewport.Height - 66f),
                     controlsOrigin,
                     altitudeText,
-                    new Vector2(28f, minimapRectangle.Bottom + 18f),
+                    new Vector2(28f, 72f),
                     _worldMap.Theme.DisplayName,
                     glowColor,
                     accentColor,
                     subtitleColor,
                     shadowColor,
-                    _heightMapTexture,
-                    _flightPosition,
-                    new Point(_worldMap.Width, _worldMap.Height),
                     true));
 
             _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.LinearClamp, DepthStencilState.None, RasterizerState.CullNone);
-            DrawDevelopmentSiteMarkers(minimapRectangle);
-            DrawOilPlatformMarkers(minimapRectangle);
             _generationDialog?.Draw(_spriteBatch, _spaceFont, _pixel, viewport);
             _spriteBatch.End();
 
@@ -545,6 +640,35 @@ namespace PETAR_PlanetExplorer
                 Matrix.CreateTranslation(new Vector3(center, 0f));
 
             DrawWorldTiles(transform);
+            DrawFogOfWarOverlay(transform);
+        }
+
+        private void DrawMapLine(Vector2 start, Vector2 end, Color color, float thickness)
+        {
+            var delta = GetWrappedWorldOffset(end - start);
+            var length = delta.Length();
+            if (length <= 0.001f)
+            {
+                return;
+            }
+
+            var angle = MathF.Atan2(delta.Y, delta.X);
+            _spriteBatch.Draw(
+                _pixel,
+                start,
+                null,
+                color,
+                angle,
+                new Vector2(0f, 0.5f),
+                new Vector2(length, thickness),
+                SpriteEffects.None,
+                0f);
+        }
+
+        private void DrawMapMarker(Vector2 position, Color color, int radius)
+        {
+            var size = (radius * 2) + 1;
+            _spriteBatch.Draw(_pixel, new Rectangle((int)MathF.Round(position.X) - radius, (int)MathF.Round(position.Y) - radius, size, size), color);
         }
 
         private void DrawHorizontalView(Viewport viewport)
@@ -583,9 +707,11 @@ namespace PETAR_PlanetExplorer
 
             cameraRight.Normalize();
             var cameraUp = Vector3.Normalize(Vector3.Cross(forward, cameraRight));
-            var cameraEyeY = MathHelper.Lerp(RenderCameraMinEyeY, RenderCameraMaxEyeY, altitudeRatio);
-            var cameraPosition = new Vector3(_flightPosition.X, cameraEyeY, _flightPosition.Y);
-            var lookDistance = MathHelper.Lerp(92f, 192f, altitudeRatio);
+            var minimumEyeY = GetVoxelCollisionSurfaceTopY(_flightPosition) + CameraCollisionEyeClearance;
+            var cameraEyeY = MathF.Max(ConvertFlightAltitudeToEyeY(_flightAltitude), minimumEyeY);
+            var horizontalWorldScale = VoxelRenderer.HorizontalWorldScale;
+            var cameraPosition = new Vector3(_flightPosition.X * horizontalWorldScale, cameraEyeY, _flightPosition.Y * horizontalWorldScale);
+            var lookDistance = MathHelper.Lerp(92f, 192f, altitudeRatio) * horizontalWorldScale;
             var lookTarget = cameraPosition + (forward * lookDistance);
             var view = Matrix.CreateLookAt(cameraPosition, lookTarget, cameraUp);
             var projection = Matrix.CreatePerspectiveFieldOfView(
@@ -663,6 +789,81 @@ namespace PETAR_PlanetExplorer
             _spriteBatch.End();
         }
 
+        private void DrawFogOfWarOverlay(Matrix transform)
+        {
+            if (_exploredMapCells == null || _worldMap == null)
+            {
+                return;
+            }
+
+            _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, DepthStencilState.None, RasterizerState.CullNone, null, transform);
+
+            for (var cellY = 0; cellY < _exploredMapSize.Y; cellY++)
+            {
+                for (var cellX = 0; cellX < _exploredMapSize.X; cellX++)
+                {
+                    if (_exploredMapCells[(cellY * _exploredMapSize.X) + cellX])
+                    {
+                        continue;
+                    }
+
+                    var fogRectangle = new Rectangle(cellX * FogOfWarCellSize, cellY * FogOfWarCellSize, FogOfWarCellSize, FogOfWarCellSize);
+                    _spriteBatch.Draw(_pixel, fogRectangle, UnexploredFogColor);
+                }
+            }
+
+            _spriteBatch.End();
+        }
+
+        private void RevealFogOfWarAroundActiveVehicle()
+        {
+            if (_worldMap == null || _exploredMapCells == null)
+            {
+                return;
+            }
+
+            var revealPosition = _activeVehicleMode == ActiveVehicleMode.Truck ? _truck.Position : _flightPosition;
+            var centerCellX = Math.Clamp((int)(revealPosition.X / FogOfWarCellSize), 0, _exploredMapSize.X - 1);
+            var centerCellY = Math.Clamp((int)(revealPosition.Y / FogOfWarCellSize), 0, _exploredMapSize.Y - 1);
+            var revealRadiusSquared = FogOfWarRevealRadiusCells * FogOfWarRevealRadiusCells;
+
+            for (var offsetY = -FogOfWarRevealRadiusCells; offsetY <= FogOfWarRevealRadiusCells; offsetY++)
+            {
+                for (var offsetX = -FogOfWarRevealRadiusCells; offsetX <= FogOfWarRevealRadiusCells; offsetX++)
+                {
+                    if ((offsetX * offsetX) + (offsetY * offsetY) > revealRadiusSquared)
+                    {
+                        continue;
+                    }
+
+                    var cellX = centerCellX + offsetX;
+                    var cellY = centerCellY + offsetY;
+                    if (cellX < 0 || cellX >= _exploredMapSize.X || cellY < 0 || cellY >= _exploredMapSize.Y)
+                    {
+                        continue;
+                    }
+
+                    _exploredMapCells[(cellY * _exploredMapSize.X) + cellX] = true;
+                }
+            }
+        }
+
+        private void InitializeFogOfWar()
+        {
+            if (_worldMap == null)
+            {
+                _exploredMapCells = null;
+                _exploredMapSize = Point.Zero;
+                return;
+            }
+
+            _exploredMapSize = new Point(
+                Math.Max(1, (int)Math.Ceiling(_worldMap.Width / (float)FogOfWarCellSize)),
+                Math.Max(1, (int)Math.Ceiling(_worldMap.Height / (float)FogOfWarCellSize)));
+            _exploredMapCells = new bool[_exploredMapSize.X * _exploredMapSize.Y];
+            RevealFogOfWarAroundActiveVehicle();
+        }
+
         private Vector2 ClampFlightPosition(Vector2 position)
         {
             if (_worldMap == null)
@@ -671,8 +872,8 @@ namespace PETAR_PlanetExplorer
             }
 
             return new Vector2(
-                MathHelper.Clamp(position.X, WorldEdgePadding, _worldMap.Width - WorldEdgePadding),
-                MathHelper.Clamp(position.Y, WorldEdgePadding, _worldMap.Height - WorldEdgePadding));
+                MathHelper.Clamp(position.X, 0f, _worldMap.Width - 0.001f),
+                MathHelper.Clamp(position.Y, 0f, _worldMap.Height - 0.001f));
         }
 
         private float GetMinimumFlightAltitude(Vector2 position, Vector3 lookDirection)
@@ -953,6 +1154,7 @@ namespace PETAR_PlanetExplorer
 
         private HeightMapFlyoverRenderer.WorldViewState BuildWorldViewState()
         {
+            var trafficCars = BuildTrafficRenderStates();
             if (_activeVehicleMode == ActiveVehicleMode.Truck)
             {
                 return new HeightMapFlyoverRenderer.WorldViewState(
@@ -964,7 +1166,25 @@ namespace PETAR_PlanetExplorer
                     false,
                     new HeightMapFlyoverRenderer.TruckWorldRenderState(Position: _truck.Position, WorldY: _truck.WorldY, Heading: _truck.Heading, WheelRotation: _truck.WheelRotation, Pitch: _truck.Pitch, IsVisible: true),
                     true,
-                    _truckCameraDistance);
+                    _truckCameraDistance,
+                    trafficCars);
+            }
+
+            var activeDebugTrafficCar = GetActiveDebugTrafficCar();
+            if (_activeVehicleMode == ActiveVehicleMode.DebugTraffic && activeDebugTrafficCar.HasValue)
+            {
+                var debugTrafficCar = activeDebugTrafficCar.Value;
+                return new HeightMapFlyoverRenderer.WorldViewState(
+                    debugTrafficCar.Position,
+                    debugTrafficCar.Heading,
+                    MathHelper.Clamp(-0.22f - (debugTrafficCar.Pitch * 0.3f), -0.6f, -0.08f),
+                    0.22f,
+                    MaxFlightAltitude,
+                    false,
+                    new HeightMapFlyoverRenderer.TruckWorldRenderState(Position: debugTrafficCar.Position, WorldY: debugTrafficCar.WorldY, Heading: debugTrafficCar.Heading, WheelRotation: 0f, Pitch: debugTrafficCar.Pitch, IsVisible: false),
+                    true,
+                    18f,
+                    trafficCars);
             }
 
             return new HeightMapFlyoverRenderer.WorldViewState(
@@ -976,7 +1196,37 @@ namespace PETAR_PlanetExplorer
                 true,
                 new HeightMapFlyoverRenderer.TruckWorldRenderState(Position: _truck.Position, WorldY: _truck.WorldY, Heading: _truck.Heading, WheelRotation: _truck.WheelRotation, Pitch: _truck.Pitch, IsVisible: true),
                 false,
-                TruckCameraDistanceDefault);
+                TruckCameraDistanceDefault,
+                trafficCars);
+        }
+
+        private IReadOnlyList<HeightMapFlyoverRenderer.TrafficCarRenderState> BuildTrafficRenderStates()
+        {
+            if (_debugTrafficCars.Count == 0)
+            {
+                return Array.Empty<HeightMapFlyoverRenderer.TrafficCarRenderState>();
+            }
+
+            var renderStates = new List<HeightMapFlyoverRenderer.TrafficCarRenderState>(_debugTrafficCars.Count);
+            var referencePosition = _activeVehicleMode switch
+            {
+                ActiveVehicleMode.Truck => _truck.Position,
+                ActiveVehicleMode.DebugTraffic when GetActiveDebugTrafficCar().HasValue => GetActiveDebugTrafficCar().Value.Position,
+                _ => _flightPosition
+            };
+
+            for (var index = 0; index < _debugTrafficCars.Count; index++)
+            {
+                var trafficCar = _debugTrafficCars[index];
+                if (GetWrappedWorldOffset(trafficCar.Position - referencePosition).LengthSquared() > TrafficRenderDistance * TrafficRenderDistance)
+                {
+                    continue;
+                }
+
+                renderStates.Add(new HeightMapFlyoverRenderer.TrafficCarRenderState(trafficCar.Position, trafficCar.WorldY, trafficCar.Heading, trafficCar.Pitch, trafficCar.Bank, trafficCar.Color));
+            }
+
+            return renderStates;
         }
 
         private void InitializeTruckState()
@@ -1168,6 +1418,40 @@ namespace PETAR_PlanetExplorer
             return GetTerrainTopY(MathHelper.Max(maxTerrainHeight, ProceduralWorldMap.SeaLevel), _worldMap?.MaxCubeColumn ?? WorldGenerationSettings.DefaultMaxCubeColumn);
         }
 
+        private float GetVoxelCollisionSurfaceTopY(Vector2 position)
+        {
+            if (_voxelWorld == null)
+            {
+                return GetCollisionSurfaceTopY(position);
+            }
+
+            var maxTopY = float.NegativeInfinity;
+            maxTopY = MathF.Max(maxTopY, TryGetVoxelCollisionSampleTopY(position.X, position.Y));
+            maxTopY = MathF.Max(maxTopY, TryGetVoxelCollisionSampleTopY(position.X - CameraCollisionExtent, position.Y - CameraCollisionExtent));
+            maxTopY = MathF.Max(maxTopY, TryGetVoxelCollisionSampleTopY(position.X + CameraCollisionExtent, position.Y - CameraCollisionExtent));
+            maxTopY = MathF.Max(maxTopY, TryGetVoxelCollisionSampleTopY(position.X - CameraCollisionExtent, position.Y + CameraCollisionExtent));
+            maxTopY = MathF.Max(maxTopY, TryGetVoxelCollisionSampleTopY(position.X + CameraCollisionExtent, position.Y + CameraCollisionExtent));
+
+            return float.IsNegativeInfinity(maxTopY)
+                ? GetCollisionSurfaceTopY(position)
+                : maxTopY;
+        }
+
+        private float TryGetVoxelCollisionSampleTopY(float sampleX, float sampleY)
+        {
+            if (_voxelWorld == null)
+            {
+                return float.NegativeInfinity;
+            }
+
+            var voxelX = (int)MathF.Floor(sampleX);
+            var voxelY = (int)MathF.Floor(sampleY);
+            var maxSearchZ = Math.Min(VoxelConstants.WorldHeight - 1, Math.Max(0, _voxelWorld.HeightLimit - 1));
+            return _voxelWorld.TryGetTopSolidBelow(voxelX, voxelY, maxSearchZ, out var topZ)
+                ? GetVoxelTopY(topZ, _voxelWorld.HeightLimit)
+                : float.NegativeInfinity;
+        }
+
         private static float GetTerrainTopY(float surfaceHeight)
         {
             return GetTerrainTopY(surfaceHeight, WorldGenerationSettings.DefaultMaxCubeColumn);
@@ -1180,6 +1464,12 @@ namespace PETAR_PlanetExplorer
             return ((columnHeight - renderVerticalOrigin) * RenderCubeHeight) + RenderFaceOverlap;
         }
 
+        private static float GetVoxelTopY(int topVoxel, int heightLimit)
+        {
+            var renderVerticalOrigin = ProceduralWorldMap.SeaLevel * (Math.Max(2, heightLimit) - 1f);
+            return (((topVoxel + 1f) - renderVerticalOrigin) * RenderCubeHeight);
+        }
+
         private static float ConvertEyeYToFlightAltitude(float eyeY)
         {
             var eyeRatio = MathHelper.Clamp((eyeY - RenderCameraMinEyeY) / (RenderCameraMaxEyeY - RenderCameraMinEyeY), 0f, 1f);
@@ -1190,6 +1480,848 @@ namespace PETAR_PlanetExplorer
         {
             var altitudeRatio = MathHelper.Clamp((flightAltitude - FlightAltitudeMinimum) / (MaxFlightAltitude - FlightAltitudeMinimum), 0f, 1f);
             return MathHelper.Lerp(RenderCameraMinEyeY, RenderCameraMaxEyeY, altitudeRatio);
+        }
+
+        private bool PathCrossesUnrelatedTown(IReadOnlyList<Vector2> connectionPath, int sourceTownIndex, int targetTownIndex, IReadOnlyList<Rectangle> townBounds)
+        {
+            if (_worldMap == null || connectionPath == null || connectionPath.Count == 0)
+            {
+                return false;
+            }
+
+            for (var pathIndex = 0; pathIndex < connectionPath.Count; pathIndex++)
+            {
+                var waypoint = _worldMap.WrapPosition(connectionPath[pathIndex]);
+                var samplePoint = new Point((int)MathF.Round(waypoint.X), (int)MathF.Round(waypoint.Y));
+                for (var townIndex = 0; townIndex < townBounds.Count; townIndex++)
+                {
+                    if (townIndex == sourceTownIndex || townIndex == targetTownIndex)
+                    {
+                        continue;
+                    }
+
+                    if (townBounds[townIndex].Contains(samplePoint))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private void InitializeTraffic()
+        {
+            _trafficCars.Clear();
+            _debugTrafficCars.Clear();
+            _activeDebugTrafficCarIndex = 0;
+            _trafficTownCenters.Clear();
+            _trafficTownRouteOptions.Clear();
+
+            if (_worldMap == null)
+            {
+                return;
+            }
+
+            IReadOnlyList<Rectangle> townBounds = _worldMap.GetTownBounds();
+            if (townBounds.Count == 0)
+            {
+                return;
+            }
+
+            _trafficRandom = new Random(_worldMap.Seed ^ unchecked((int)0x6e5f4c39));
+            BuildTrafficTownRouteOptions(townBounds);
+
+            var targetTrafficCount = _generationSettings.TrafficCount;
+            for (var townIndex = 0; townIndex < _trafficTownRouteOptions.Count && _debugTrafficCars.Count < targetTrafficCount; townIndex++)
+            {
+                List<TrafficRouteLink> routeOptions = _trafficTownRouteOptions[townIndex];
+                for (var routeIndex = 0; routeIndex < routeOptions.Count; routeIndex++)
+                {
+                    var trafficCar = CreateTrafficCarStateForLink(townIndex, routeOptions[routeIndex], incomingDirection: -1, staggerProgress: true, _trafficRandom);
+                    if (trafficCar.TargetTownIndex < 0)
+                    {
+                        continue;
+                    }
+
+                    var duplicateLocation = false;
+                    for (var existingIndex = 0; existingIndex < _debugTrafficCars.Count; existingIndex++)
+                    {
+                        if (GetWrappedWorldOffset(_debugTrafficCars[existingIndex].Position - trafficCar.Position).LengthSquared() < 400f)
+                        {
+                            duplicateLocation = true;
+                            break;
+                        }
+                    }
+
+                    if (duplicateLocation)
+                    {
+                        continue;
+                    }
+
+                    _debugTrafficCars.Add(trafficCar);
+                    _trafficCars.Add(trafficCar);
+                    if (_debugTrafficCars.Count >= targetTrafficCount)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            var activeDebugTrafficCar = GetActiveDebugTrafficCar();
+            if (activeDebugTrafficCar.HasValue)
+            {
+                FocusViewOnTrafficCar(activeDebugTrafficCar.Value);
+            }
+        }
+
+        private void FocusViewOnTrafficCar(TrafficCarState debugTrafficCar)
+        {
+            if (_worldMap == null)
+            {
+                return;
+            }
+
+            _flightPosition = _worldMap.WrapPosition(debugTrafficCar.Position);
+            _activeVehicleMode = ActiveVehicleMode.Ship;
+            _usePlanView = true;
+            IsMouseVisible = true;
+            _mouseLookInitialized = false;
+        }
+
+        private void BuildTrafficTownRouteOptions(IReadOnlyList<Rectangle> townBounds)
+        {
+            _trafficTownCenters.Clear();
+            _trafficTownRouteOptions.Clear();
+
+            for (var townIndex = 0; townIndex < townBounds.Count; townIndex++)
+            {
+                _trafficTownCenters.Add(new Vector2(
+                    townBounds[townIndex].Left + (townBounds[townIndex].Width * 0.5f),
+                    townBounds[townIndex].Top + (townBounds[townIndex].Height * 0.5f)));
+                _trafficTownRouteOptions.Add(new List<TrafficRouteLink>(TrafficRouteChoiceCount));
+            }
+
+            IReadOnlyList<ProceduralWorldMap.TownTrafficLinkInfo> trafficLinks = _worldMap.GetTownTrafficLinks();
+            for (var linkIndex = 0; linkIndex < trafficLinks.Count; linkIndex++)
+            {
+                var link = trafficLinks[linkIndex];
+                if (link.SourceTownIndex < 0 || link.SourceTownIndex >= townBounds.Count ||
+                    link.TargetTownIndex < 0 || link.TargetTownIndex >= townBounds.Count)
+                {
+                    continue;
+                }
+
+                if (TryCreateTrafficRouteLink(link, out var routeLink))
+                {
+                    _trafficTownRouteOptions[link.SourceTownIndex].Add(routeLink);
+                }
+            }
+        }
+
+        private bool TryCreateTrafficRouteLink(ProceduralWorldMap.TownTrafficLinkInfo link, out TrafficRouteLink routeLink)
+        {
+            routeLink = CreateInvalidTrafficRouteLink();
+            if (link.SourceTownIndex < 0 || link.TargetTownIndex < 0 ||
+                link.SourceRoadCenter == Vector2.Zero || link.TargetRoadCenter == Vector2.Zero ||
+                link.ConnectionPath == null || link.ConnectionPath.Count < 2)
+            {
+                return false;
+            }
+
+            routeLink = new TrafficRouteLink(link.SourceDirection, link.TargetTownIndex, link.SourceRoadCenter, link.TargetRoadCenter, link.TargetDirection, link.ConnectionPath);
+            return true;
+        }
+
+        private void LogTrafficInitializationDiagnostics(IReadOnlyList<int> spawnedCarsPerTown, int attemptedCars, int spawnedCars)
+        {
+            if (_worldMap == null)
+            {
+                return;
+            }
+
+            IReadOnlyList<ProceduralWorldMap.TownTrafficLinkInfo> trafficLinks = _worldMap.GetTownTrafficLinks();
+            var routeCounts = new string[_trafficTownRouteOptions.Count];
+            var spawnCounts = new string[spawnedCarsPerTown.Count];
+            var zeroLinkTowns = 0;
+            var zeroSpawnTowns = 0;
+            for (var townIndex = 0; townIndex < _trafficTownRouteOptions.Count; townIndex++)
+            {
+                var routeCount = _trafficTownRouteOptions[townIndex].Count;
+                routeCounts[townIndex] = $"{townIndex}:{routeCount}";
+                spawnCounts[townIndex] = $"{townIndex}:{spawnedCarsPerTown[townIndex]}";
+                if (routeCount == 0)
+                {
+                    zeroLinkTowns++;
+                }
+
+                if (spawnedCarsPerTown[townIndex] == 0)
+                {
+                    zeroSpawnTowns++;
+                }
+            }
+
+            DebugLogger.Info($"Traffic diagnostics: towns={_trafficTownRouteOptions.Count}, explicitLinks={trafficLinks.Count}, zeroLinkTowns={zeroLinkTowns}, zeroSpawnTowns={zeroSpawnTowns}, spawnedCars={spawnedCars}/{attemptedCars}, routeCounts=[{string.Join(", ", routeCounts)}], spawnedPerTown=[{string.Join(", ", spawnCounts)}].");
+        }
+
+        private void LogNearestTrafficDiagnostics()
+        {
+            if (_trafficCars.Count == 0)
+            {
+                return;
+            }
+
+            var nearestToShip = float.MaxValue;
+            var nearestToTruck = float.MaxValue;
+            for (var index = 0; index < _trafficCars.Count; index++)
+            {
+                var trafficPosition = _trafficCars[index].Position;
+                nearestToShip = MathF.Min(nearestToShip, GetWrappedWorldOffset(trafficPosition - _flightPosition).Length());
+                nearestToTruck = MathF.Min(nearestToTruck, GetWrappedWorldOffset(trafficPosition - _truck.Position).Length());
+            }
+
+            DebugLogger.Info($"Traffic visibility diagnostics: nearestToShip={nearestToShip:0.0} cells, nearestToTruck={nearestToTruck:0.0} cells, shipPosition=({_flightPosition.X:0.0}, {_flightPosition.Y:0.0}), truckPosition=({_truck.Position.X:0.0}, {_truck.Position.Y:0.0}).");
+        }
+
+        private void UpdateTraffic(float deltaTime)
+        {
+            if (_worldMap == null || _debugTrafficCars.Count == 0)
+            {
+                return;
+            }
+
+            for (var carIndex = 0; carIndex < _debugTrafficCars.Count; carIndex++)
+            {
+                var car = _debugTrafficCars[carIndex];
+                var nextProgress = car.RouteDistance > 0.001f
+                    ? car.Progress + ((car.Speed * deltaTime) / car.RouteDistance)
+                    : 1f;
+                if (nextProgress >= 1f)
+                {
+                    car = CreateTrafficReturnState(car, _trafficRandom);
+                    nextProgress = car.RouteDistance > 0.001f
+                        ? (car.Speed * deltaTime) / car.RouteDistance
+                        : 0f;
+                }
+
+                var previousHeading = car.Heading;
+                car.Progress = nextProgress;
+                var routeDistance = car.RouteDistance * car.Progress;
+                GetTrafficRouteTransform(car, routeDistance, out var routePosition, out var routeHeading);
+                var routeSplineHeading = GetTrafficRouteTransformHeading(car.RouteWaypoints, routeDistance, routeHeading);
+                var routeSampleWorldY = GetTrafficWorldY(routePosition, car.HoverPhase);
+                var nextWorldY = MathHelper.Lerp(car.WorldY, routeSampleWorldY, MathHelper.Clamp(deltaTime * TrafficHeightSmoothingResponse, 0f, 1f));
+                var smoothedHeading = previousHeading + (NormalizeAngle(routeSplineHeading - previousHeading) * MathHelper.Clamp(deltaTime * 7f, 0f, 1f));
+                var routeHeadingDelta = NormalizeAngle(smoothedHeading - previousHeading);
+                var routeTargetBank = MathHelper.Clamp(-routeHeadingDelta * 2.2f, -TrafficBankLimit, TrafficBankLimit);
+                var routeTargetPitch = MathHelper.Clamp((routeSampleWorldY - car.WorldY) * 0.08f, -TrafficPitchLimit, TrafficPitchLimit);
+
+                car.Position = routePosition;
+                car.WorldY = nextWorldY;
+                car.Heading = smoothedHeading;
+                car.Bank = MathHelper.Lerp(car.Bank, routeTargetBank, MathHelper.Clamp(deltaTime * TrafficBankResponse, 0f, 1f));
+                car.Pitch = MathHelper.Lerp(car.Pitch, routeTargetPitch, MathHelper.Clamp(deltaTime * TrafficPitchResponse, 0f, 1f));
+
+                _debugTrafficCars[carIndex] = car;
+                if (_trafficCars.Count <= carIndex)
+                {
+                    _trafficCars.Add(car);
+                }
+                else
+                {
+                    _trafficCars[carIndex] = car;
+                }
+            }
+        }
+
+        private TrafficCarState? GetActiveDebugTrafficCar()
+        {
+            if (_debugTrafficCars.Count == 0)
+            {
+                return null;
+            }
+
+            _activeDebugTrafficCarIndex = Math.Clamp(_activeDebugTrafficCarIndex, 0, _debugTrafficCars.Count - 1);
+            return _debugTrafficCars[_activeDebugTrafficCarIndex];
+        }
+
+        private TrafficCarState CreateTrafficCarStateWithRetry(int preferredTownIndex, int incomingDirection, bool staggerProgress)
+        {
+            IReadOnlyList<Rectangle> townBounds = _worldMap.GetTownBounds();
+            if (townBounds.Count == 0)
+            {
+                return default;
+            }
+
+            var preferredTrafficCar = CreateTrafficCarState(preferredTownIndex, incomingDirection, staggerProgress, _trafficRandom);
+            if (preferredTrafficCar.TargetTownIndex >= 0)
+            {
+                return preferredTrafficCar;
+            }
+
+            var randomStartIndex = _trafficRandom.Next(townBounds.Count);
+            for (var offset = 0; offset < townBounds.Count; offset++)
+            {
+                var townIndex = (randomStartIndex + offset) % townBounds.Count;
+                if (townIndex == preferredTownIndex)
+                {
+                    continue;
+                }
+
+                var trafficCar = CreateTrafficCarState(townIndex, -1, staggerProgress, _trafficRandom);
+                if (trafficCar.TargetTownIndex >= 0)
+                {
+                    return trafficCar;
+                }
+            }
+
+            return default;
+        }
+
+        private TrafficCarState CreateTrafficReturnState(TrafficCarState car, Random random)
+        {
+            if (car.RouteWaypoints == null || car.RouteWaypoints.Count == 0)
+            {
+                return car;
+            }
+
+            var reversedWaypoints = new List<Vector2>(car.RouteWaypoints);
+            reversedWaypoints.Reverse();
+            var hoverPhase = (float)random.NextDouble() * MathHelper.TwoPi;
+            var speed = MathHelper.Lerp(TrafficSpeedMin, TrafficSpeedMax, (float)random.NextDouble());
+            var routeDistance = ComputeTrafficRouteDistance(reversedWaypoints);
+            GetTrafficRouteTransform(reversedWaypoints, 0f, out var position, out var heading);
+            IReadOnlyList<Rectangle> townBounds = _worldMap.GetTownBounds();
+            var resolvedTargetTownIndex = ResolveTrafficRouteEndpointTownIndex(townBounds, reversedWaypoints, car.CurrentTownIndex);
+            return new TrafficCarState(
+                position,
+                GetTrafficWorldY(position, hoverPhase),
+                reversedWaypoints,
+                routeDistance,
+                0f,
+                heading,
+                speed,
+                hoverPhase,
+                car.Color,
+                car.TargetTownIndex,
+                resolvedTargetTownIndex,
+                GetOppositeDirection(car.ArrivalDirection));
+        }
+
+        private TrafficCarState CreateTrafficCarState(int currentTownIndex, int incomingDirection, bool staggerProgress, Random random)
+        {
+            IReadOnlyList<Rectangle> townBounds = _worldMap.GetTownBounds();
+            if (currentTownIndex < 0 || currentTownIndex >= townBounds.Count)
+            {
+                return default;
+            }
+
+            var routeLink = SelectTrafficRouteLink(currentTownIndex, incomingDirection, random);
+            if (routeLink.TargetTownIndex < 0)
+            {
+                return default;
+            }
+
+            return CreateTrafficCarStateForLink(currentTownIndex, routeLink, incomingDirection, staggerProgress, random);
+        }
+
+        private TrafficCarState CreateTrafficCarStateForLink(int currentTownIndex, TrafficRouteLink routeLink, int incomingDirection, bool staggerProgress, Random random)
+        {
+            IReadOnlyList<Rectangle> townBounds = _worldMap.GetTownBounds();
+            if (currentTownIndex < 0 || currentTownIndex >= townBounds.Count || routeLink.TargetTownIndex < 0 || routeLink.TargetTownIndex >= townBounds.Count)
+            {
+                return default;
+            }
+
+            var exitDirection = routeLink.SourceDirection;
+            var targetTownIndex = routeLink.TargetTownIndex;
+            var startDirection = incomingDirection >= 0 ? incomingDirection : exitDirection;
+            var start = GetTownExitPoint(townBounds[currentTownIndex], startDirection);
+            var targetDirection = routeLink.TargetDirection;
+            var end = GetTownExitPoint(townBounds[targetTownIndex], targetDirection);
+            var progress = staggerProgress ? (float)random.NextDouble() * 0.92f : 0f;
+            var color = TrafficColorPalette[random.Next(TrafficColorPalette.Length)];
+            var speed = MathHelper.Lerp(TrafficSpeedMin, TrafficSpeedMax, (float)random.NextDouble());
+            var hoverPhase = (float)random.NextDouble() * MathHelper.TwoPi;
+            var startRoad = routeLink.StartRoad;
+            if (incomingDirection >= 0 && !_worldMap.TryFindRoadCenterAlongDirection(start, startDirection, TrafficDirectionalRoadForwardSearch, TrafficDirectionalRoadLateralSearch, out startRoad))
+            {
+                startRoad = Vector2.Zero;
+            }
+
+            var routeWaypoints = routeLink.ConnectionPath != null && routeLink.ConnectionPath.Count >= 2
+                ? CreateSmoothedTrafficRouteWaypoints(routeLink.ConnectionPath)
+                : BuildTrafficRouteWaypoints(start, startDirection, end, targetDirection, startRoad, routeLink.EndRoad);
+            if (routeWaypoints.Count == 0)
+            {
+                return default;
+            }
+
+            var routeDistance = ComputeTrafficRouteDistance(routeWaypoints);
+            GetTrafficRouteTransform(routeWaypoints, routeDistance * progress, out var position, out var heading);
+            var resolvedTargetTownIndex = ResolveTrafficRouteEndpointTownIndex(townBounds, routeWaypoints, targetTownIndex);
+            return new TrafficCarState(
+                position,
+                GetTrafficWorldY(position, hoverPhase),
+                routeWaypoints,
+                routeDistance,
+                progress,
+                heading,
+                speed,
+                hoverPhase,
+                color,
+                currentTownIndex,
+                resolvedTargetTownIndex,
+                targetDirection);
+        }
+
+        private TrafficRouteLink SelectTrafficRouteLink(int currentTownIndex, int incomingDirection, Random random)
+        {
+            List<TrafficRouteLink> routeOptions = _trafficTownRouteOptions[currentTownIndex];
+            if (routeOptions.Count == 0)
+            {
+                return CreateInvalidTrafficRouteLink();
+            }
+
+            var preferredOptions = new List<TrafficRouteLink>();
+            var reverseOptions = new List<TrafficRouteLink>();
+            for (var index = 0; index < routeOptions.Count; index++)
+            {
+                var routeOption = routeOptions[index];
+                if (routeOption.TargetTownIndex < 0)
+                {
+                    continue;
+                }
+
+                if (incomingDirection >= 0 && routeOption.SourceDirection == incomingDirection)
+                {
+                    reverseOptions.Add(routeOption);
+                    continue;
+                }
+
+                preferredOptions.Add(routeOption);
+            }
+
+            if (preferredOptions.Count > 0)
+            {
+                return preferredOptions[random.Next(preferredOptions.Count)];
+            }
+
+            if (reverseOptions.Count > 0)
+            {
+                return reverseOptions[random.Next(reverseOptions.Count)];
+            }
+
+            for (var index = 0; index < routeOptions.Count; index++)
+            {
+                if (routeOptions[index].TargetTownIndex >= 0)
+                {
+                    return routeOptions[index];
+                }
+            }
+
+            return CreateInvalidTrafficRouteLink();
+        }
+
+        private static TrafficRouteLink CreateInvalidTrafficRouteLink()
+        {
+            return new TrafficRouteLink(-1, -1, Vector2.Zero, Vector2.Zero, -1, Array.Empty<Vector2>());
+        }
+
+        private static int GetOppositeDirection(int direction)
+        {
+            return direction < 0 ? -1 : (direction + 2) & 3;
+        }
+
+        private static bool IsOffsetInTownDirection(Vector2 offset, int direction)
+        {
+            return direction switch
+            {
+                0 => offset.Y <= -MathF.Abs(offset.X) * 0.2f,
+                1 => offset.X >= MathF.Abs(offset.Y) * 0.2f,
+                2 => offset.Y >= MathF.Abs(offset.X) * 0.2f,
+                _ => offset.X <= -MathF.Abs(offset.Y) * 0.2f
+            };
+        }
+
+        private List<Vector2> BuildTrafficRouteWaypoints(Vector2 start, int startDirection, Vector2 end, int endDirection, Vector2 startRoad, Vector2 endRoad)
+        {
+            if (startRoad != Vector2.Zero && endRoad != Vector2.Zero &&
+                _worldMap.TryBuildRoadCenterPath(startRoad, endRoad, TrafficRoadPathSearchDistance, out var roadPath) &&
+                roadPath.Count > 0)
+            {
+                return FinalizeTrafficRouteWaypoints(start, end, roadPath);
+            }
+
+            if (startRoad == Vector2.Zero && _worldMap.TryFindNearestRoadCenter(start, TrafficRoadSearchRadius, out var nearestStartRoad))
+            {
+                startRoad = nearestStartRoad;
+            }
+
+            if (endRoad == Vector2.Zero && _worldMap.TryFindNearestRoadCenter(end, TrafficRoadSearchRadius, out var nearestEndRoad))
+            {
+                endRoad = nearestEndRoad;
+            }
+
+            if (startRoad != Vector2.Zero && endRoad != Vector2.Zero &&
+                _worldMap.TryBuildRoadCenterPath(startRoad, endRoad, TrafficRoadPathSearchDistance, out roadPath) &&
+                roadPath.Count > 0)
+            {
+                return FinalizeTrafficRouteWaypoints(start, end, roadPath);
+            }
+
+            if (_worldMap.TryFindRoadCenterAlongDirection(start, startDirection, TrafficDirectionalRoadForwardSearch, TrafficDirectionalRoadLateralSearch, out startRoad) &&
+                _worldMap.TryFindRoadCenterAlongDirection(end, endDirection, TrafficDirectionalRoadForwardSearch, TrafficDirectionalRoadLateralSearch, out endRoad) &&
+                _worldMap.TryBuildRoadCenterPath(startRoad, endRoad, TrafficRoadPathSearchDistance, out roadPath) &&
+                roadPath.Count > 0)
+            {
+                return FinalizeTrafficRouteWaypoints(start, end, roadPath);
+            }
+
+            return new List<Vector2>();
+        }
+
+        private List<Vector2> FinalizeTrafficRouteWaypoints(Vector2 start, Vector2 end, IReadOnlyList<Vector2> candidateWaypoints)
+        {
+            var normalizedWaypoints = new List<Vector2>((candidateWaypoints?.Count ?? 0) + 2);
+
+            void AddWaypoint(Vector2 waypoint)
+            {
+                if (waypoint == Vector2.Zero)
+                {
+                    return;
+                }
+
+                var wrappedWaypoint = _worldMap.WrapPosition(waypoint);
+                if (normalizedWaypoints.Count > 0 && GetWrappedWorldOffset(wrappedWaypoint - normalizedWaypoints[^1]).LengthSquared() <= 0.01f)
+                {
+                    return;
+                }
+
+                normalizedWaypoints.Add(wrappedWaypoint);
+            }
+
+            AddWaypoint(start);
+
+            if (candidateWaypoints != null)
+            {
+                for (var index = 0; index < candidateWaypoints.Count; index++)
+                {
+                    AddWaypoint(candidateWaypoints[index]);
+                }
+            }
+
+            AddWaypoint(end);
+
+            if (normalizedWaypoints.Count < 2)
+            {
+                return new List<Vector2>();
+            }
+
+            return DensifyTrafficRouteWaypoints(normalizedWaypoints);
+        }
+
+        private List<Vector2> CreateSmoothedTrafficRouteWaypoints(IReadOnlyList<Vector2> displayedWaypoints)
+        {
+            var normalizedWaypoints = new List<Vector2>(displayedWaypoints?.Count ?? 0);
+            if (displayedWaypoints == null)
+            {
+                return normalizedWaypoints;
+            }
+
+            for (var index = 0; index < displayedWaypoints.Count; index++)
+            {
+                var waypoint = _worldMap.WrapPosition(displayedWaypoints[index]);
+                if (normalizedWaypoints.Count > 0 && GetWrappedWorldOffset(waypoint - normalizedWaypoints[^1]).LengthSquared() <= 0.01f)
+                {
+                    continue;
+                }
+
+                normalizedWaypoints.Add(waypoint);
+            }
+
+            if (normalizedWaypoints.Count < 2)
+            {
+                return normalizedWaypoints;
+            }
+
+            var simplifiedWaypoints = SimplifyTrafficRouteWaypoints(normalizedWaypoints, TrafficRouteSimplificationTolerance);
+            return DensifyTrafficRouteWaypoints(simplifiedWaypoints);
+        }
+
+        private List<Vector2> SimplifyTrafficRouteWaypoints(IReadOnlyList<Vector2> waypoints, float tolerance)
+        {
+            if (waypoints == null || waypoints.Count < 3 || _worldMap == null)
+            {
+                return new List<Vector2>(waypoints ?? Array.Empty<Vector2>());
+            }
+
+            var keep = new bool[waypoints.Count];
+            keep[0] = true;
+            keep[^1] = true;
+
+            void SimplifyRange(int startIndex, int endIndex)
+            {
+                if (endIndex - startIndex <= 1)
+                {
+                    return;
+                }
+
+                var start = _worldMap.WrapPosition(waypoints[startIndex]);
+                var end = _worldMap.WrapPosition(waypoints[endIndex]);
+                var segment = GetWrappedWorldOffset(end - start);
+                var segmentLengthSquared = segment.LengthSquared();
+                if (segmentLengthSquared <= 0.0001f)
+                {
+                    return;
+                }
+
+                var maxDistanceSquared = 0f;
+                var maxDistanceIndex = -1;
+                for (var index = startIndex + 1; index < endIndex; index++)
+                {
+                    var point = _worldMap.WrapPosition(waypoints[index]);
+                    var pointOffset = GetWrappedWorldOffset(point - start);
+                    var t = MathHelper.Clamp(Vector2.Dot(pointOffset, segment) / segmentLengthSquared, 0f, 1f);
+                    var closestPoint = _worldMap.WrapPosition(start + (segment * t));
+                    var distanceSquared = GetWrappedWorldOffset(point - closestPoint).LengthSquared();
+                    if (distanceSquared > maxDistanceSquared)
+                    {
+                        maxDistanceSquared = distanceSquared;
+                        maxDistanceIndex = index;
+                    }
+                }
+
+                if (maxDistanceIndex < 0 || maxDistanceSquared <= tolerance * tolerance)
+                {
+                    return;
+                }
+
+                keep[maxDistanceIndex] = true;
+                SimplifyRange(startIndex, maxDistanceIndex);
+                SimplifyRange(maxDistanceIndex, endIndex);
+            }
+
+            SimplifyRange(0, waypoints.Count - 1);
+
+            var simplifiedWaypoints = new List<Vector2>(waypoints.Count);
+            for (var index = 0; index < waypoints.Count; index++)
+            {
+                if (keep[index])
+                {
+                    simplifiedWaypoints.Add(_worldMap.WrapPosition(waypoints[index]));
+                }
+            }
+
+            return simplifiedWaypoints;
+        }
+
+        private List<Vector2> DensifyTrafficRouteWaypoints(IReadOnlyList<Vector2> waypoints)
+        {
+            var densifiedWaypoints = new List<Vector2>(waypoints.Count * 2);
+
+            void AddWaypoint(Vector2 waypoint)
+            {
+                if (densifiedWaypoints.Count > 0 && GetWrappedWorldOffset(waypoint - densifiedWaypoints[^1]).LengthSquared() <= 0.01f)
+                {
+                    return;
+                }
+
+                densifiedWaypoints.Add(_worldMap.WrapPosition(waypoint));
+            }
+
+            AddWaypoint(waypoints[0]);
+            for (var index = 1; index < waypoints.Count; index++)
+            {
+                var previous = densifiedWaypoints[^1];
+                var next = _worldMap.WrapPosition(waypoints[index]);
+                var segment = GetWrappedWorldOffset(next - previous);
+                var segmentLength = segment.Length();
+                if (segmentLength <= 0.001f)
+                {
+                    continue;
+                }
+
+                var subdivisionCount = Math.Max(1, (int)MathF.Ceiling(segmentLength / 0.5f));
+                for (var subdivision = 1; subdivision <= subdivisionCount; subdivision++)
+                {
+                    var t = subdivision / (float)subdivisionCount;
+                    AddWaypoint(previous + (segment * t));
+                }
+            }
+
+            return densifiedWaypoints;
+        }
+
+        private float ComputeTrafficRouteDistance(IReadOnlyList<Vector2> waypoints)
+        {
+            var distance = 0f;
+            for (var index = 1; index < waypoints.Count; index++)
+            {
+                distance += GetWrappedWorldDistance(waypoints[index - 1], waypoints[index]);
+            }
+
+            return MathF.Max(1f, distance);
+        }
+
+        private float GetTrafficRouteTransformHeading(IReadOnlyList<Vector2> routeWaypoints, float routeDistance, float fallbackHeading)
+        {
+            if (routeWaypoints == null || routeWaypoints.Count < 2 || _worldMap == null)
+            {
+                return fallbackHeading;
+            }
+
+            GetTrafficRouteTransform(routeWaypoints, routeDistance, out _, out var heading);
+            return heading;
+        }
+
+        private float GetWrappedWorldDistance(Vector2 start, Vector2 end)
+        {
+            return GetWrappedWorldOffset(end - start).Length();
+        }
+
+        private int ResolveTrafficRouteEndpointTownIndex(IReadOnlyList<Rectangle> townBounds, IReadOnlyList<Vector2> routeWaypoints, int fallbackTownIndex)
+        {
+            if (_worldMap == null || routeWaypoints == null || routeWaypoints.Count == 0)
+            {
+                return fallbackTownIndex;
+            }
+
+            var endpoint = _worldMap.WrapPosition(routeWaypoints[^1]);
+            var bestTownIndex = fallbackTownIndex;
+            var bestDistanceSquared = float.MaxValue;
+            for (var townIndex = 0; townIndex < townBounds.Count; townIndex++)
+            {
+                var townCenter = GetTownCenter(townBounds[townIndex]);
+                var distanceSquared = GetWrappedWorldOffset(endpoint - townCenter).LengthSquared();
+                if (distanceSquared >= bestDistanceSquared)
+                {
+                    continue;
+                }
+
+                bestDistanceSquared = distanceSquared;
+                bestTownIndex = townIndex;
+            }
+
+            return bestTownIndex;
+        }
+
+        private void GetTrafficRouteTransform(TrafficCarState car, float routeDistance, out Vector2 position, out float heading)
+        {
+            GetTrafficRouteTransform(car.RouteWaypoints, routeDistance, out position, out heading);
+        }
+
+        private void GetTrafficRouteTransform(IReadOnlyList<Vector2> routeWaypoints, float routeDistance, out Vector2 position, out float heading)
+        {
+            if (routeWaypoints == null || routeWaypoints.Count == 0)
+            {
+                position = Vector2.Zero;
+                heading = 0f;
+                return;
+            }
+
+            var remainingDistance = MathHelper.Clamp(routeDistance, 0f, float.MaxValue);
+            for (var index = 1; index < routeWaypoints.Count; index++)
+            {
+                var start = routeWaypoints[index - 1];
+                var end = routeWaypoints[index];
+                var segment = GetWrappedWorldOffset(end - start);
+                var segmentLength = segment.Length();
+                if (segmentLength <= 0.001f)
+                {
+                    continue;
+                }
+
+                if (remainingDistance <= segmentLength)
+                {
+                    var t = MathHelper.Clamp(remainingDistance / segmentLength, 0f, 1f);
+                    position = _worldMap.WrapPosition(start + (segment * t));
+                    heading = MathF.Atan2(segment.Y, segment.X);
+                    return;
+                }
+
+                remainingDistance -= segmentLength;
+            }
+
+            position = _worldMap.WrapPosition(routeWaypoints[^1]);
+            if (routeWaypoints.Count > 1)
+            {
+                var finalSegment = GetWrappedWorldOffset(routeWaypoints[^1] - routeWaypoints[^2]);
+                heading = finalSegment.LengthSquared() > 0.001f ? MathF.Atan2(finalSegment.Y, finalSegment.X) : 0f;
+                return;
+            }
+
+            heading = 0f;
+        }
+
+        private static Vector2 GetTrafficRouteMidpoint(Vector2 start, Vector2 end, int exitDirection)
+        {
+            var horizontalFirst = exitDirection == 1 || exitDirection == 3;
+            return horizontalFirst
+                ? new Vector2(end.X, start.Y)
+                : new Vector2(start.X, end.Y);
+        }
+
+        private static int GetPreferredTownDirection(Vector2 fromPosition, Vector2 towardPosition)
+        {
+            var offset = towardPosition - fromPosition;
+            if (MathF.Abs(offset.X) >= MathF.Abs(offset.Y))
+            {
+                return offset.X >= 0f ? 1 : 3;
+            }
+
+            return offset.Y >= 0f ? 2 : 0;
+        }
+
+        private static Vector2 GetTownExitPoint(Rectangle bounds, int direction)
+        {
+            var centerX = bounds.Left + (bounds.Width * 0.5f);
+            var centerY = bounds.Top + (bounds.Height * 0.5f);
+            var clearance = (TrafficRoadWidthWorld / 12f) * 1.4f;
+            return direction switch
+            {
+                0 => new Vector2(centerX, bounds.Top - clearance),
+                1 => new Vector2(bounds.Right + clearance, centerY),
+                2 => new Vector2(centerX, bounds.Bottom + clearance),
+                _ => new Vector2(bounds.Left - clearance, centerY)
+            };
+        }
+
+        private float GetTrafficWorldY(Vector2 position, float hoverPhase)
+        {
+            return GetCollisionSurfaceTopY(position)
+                + TrafficHoverHeight
+                + (MathF.Sin((_worldTime * TrafficHoverBobSpeed) + hoverPhase) * TrafficHoverBobAmplitude);
+        }
+
+        private Vector2 GetWrappedWorldOffset(Vector2 offset)
+        {
+            if (_worldMap == null)
+            {
+                return offset;
+            }
+
+            var halfWidth = _worldMap.Width * 0.5f;
+            var halfHeight = _worldMap.Height * 0.5f;
+            if (offset.X > halfWidth)
+            {
+                offset.X -= _worldMap.Width;
+            }
+            else if (offset.X < -halfWidth)
+            {
+                offset.X += _worldMap.Width;
+            }
+
+            if (offset.Y > halfHeight)
+            {
+                offset.Y -= _worldMap.Height;
+            }
+            else if (offset.Y < -halfHeight)
+            {
+                offset.Y += _worldMap.Height;
+            }
+
+            return offset;
         }
 
         private static float AccelerateTowards(float current, float target, float acceleration, float deltaTime)
@@ -1206,6 +2338,21 @@ namespace PETAR_PlanetExplorer
             }
 
             return current;
+        }
+
+        private static float NormalizeAngle(float angle)
+        {
+            while (angle > MathF.PI)
+            {
+                angle -= MathHelper.TwoPi;
+            }
+
+            while (angle < -MathF.PI)
+            {
+                angle += MathHelper.TwoPi;
+            }
+
+            return angle;
         }
 
         private string GetActiveTerrainSlotDisplayName()
@@ -1247,6 +2394,8 @@ namespace PETAR_PlanetExplorer
             _oilPlatforms.Clear();
             _activeMissile = null;
             _missileDebris.Clear();
+            _debugTrafficCars.Clear();
+            _activeDebugTrafficCarIndex = 0;
             _forwardVelocity = 0f;
             _turnVelocity = 0f;
             _verticalVelocity = 0f;
@@ -1305,12 +2454,19 @@ namespace PETAR_PlanetExplorer
             _activeMissile = null;
             _missileDebris.Clear();
             InitializeTruckState();
+            InitializeTraffic();
             _flightAltitude = _terrainFollowMode ? GetTerrainFollowAltitude(_flightPosition, GetLookDirection()) : 3000f;
+            InitializeFogOfWar();
             _worldGenerationProgress = 0f;
             _worldGenerationStatus = "World ready";
             _worldGenerationTask = null;
 
             DebugLogger.Info($"Generated procedural world map {_worldMap.Width}x{_worldMap.Height} using seed {_worldMap.Seed}.");
+        }
+
+        private static Vector2 GetTownCenter(Rectangle bounds)
+        {
+            return new Vector2(bounds.Left + (bounds.Width * 0.5f), bounds.Top + (bounds.Height * 0.5f));
         }
 
         private void EnsureVoxelRenderer()
@@ -1401,12 +2557,64 @@ namespace PETAR_PlanetExplorer
             public float VerticalVelocity;
         }
 
+        private struct TrafficCarState
+        {
+            public TrafficCarState(Vector2 position, float worldY, List<Vector2> routeWaypoints, float routeDistance, float progress, float heading, float speed, float hoverPhase, Color color, int currentTownIndex, int targetTownIndex, int arrivalDirection)
+            {
+                Position = position;
+                WorldY = worldY;
+                RouteWaypoints = routeWaypoints;
+                RouteDistance = routeDistance;
+                Progress = progress;
+                Heading = heading;
+                Speed = speed;
+                HoverPhase = hoverPhase;
+                Pitch = 0f;
+                Bank = 0f;
+                Color = color;
+                CurrentTownIndex = currentTownIndex;
+                TargetTownIndex = targetTownIndex;
+                ArrivalDirection = arrivalDirection;
+            }
+
+            public Vector2 Position;
+
+            public float WorldY;
+
+            public List<Vector2> RouteWaypoints;
+
+            public float RouteDistance;
+
+            public float Progress;
+
+            public float Heading;
+
+            public float Speed;
+
+            public float HoverPhase;
+
+            public float Pitch;
+
+            public float Bank;
+
+            public Color Color;
+
+            public int CurrentTownIndex;
+
+            public int TargetTownIndex;
+
+            public int ArrivalDirection;
+        }
+
+        private readonly record struct TrafficRouteLink(int SourceDirection, int TargetTownIndex, Vector2 StartRoad, Vector2 EndRoad, int TargetDirection, IReadOnlyList<Vector2> ConnectionPath);
+
         private readonly record struct MissileState(Vector2 Position, float WorldY, Vector3 Direction, float TraveledDistance, float ExplosionRadius);
 
         private enum ActiveVehicleMode
         {
             Ship,
-            Truck
+            Truck,
+            DebugTraffic
         }
 
         private readonly record struct TruckState(Vector2 Position, float Heading, float WorldY, float Speed, float TurnVelocity, float WheelRotation, float Pitch);

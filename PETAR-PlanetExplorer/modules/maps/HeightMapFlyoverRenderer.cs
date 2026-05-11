@@ -69,12 +69,22 @@ namespace PETAR_PlanetExplorer.Modules.Maps
         private readonly VoxelChunk[] _cloudChunks;
         private readonly VoxelChunk[] _birdChunks;
         private readonly VoxelChunk[] _volcanoSmokeChunks;
+        private readonly VoxelChunk _trafficChunk;
+        private ChunkCandidate[] _candidateBuffer;
         private Dictionary<ChunkCacheKey, VoxelChunk> _terrainChunkCache;
         private Dictionary<ChunkCacheKey, WaterChunkCacheEntry> _waterChunkCache;
         private Matrix[] _visibleChunkWorlds;
         private ChunkCacheKey[] _visibleChunkKeys;
+        private int[] _visibleTerrainCacheVersions;
+        private int[] _visibleWaterTimeBuckets;
+        private bool[] _visibleWaterReducedDetail;
         private int _activeWaterTimeBucket = int.MinValue;
         private int _nearDetailRefreshCursor;
+        private int _lastVisibleChunkCount;
+        private int _terrainCacheVersion;
+        private int _terrainCacheSeed = int.MinValue;
+        private float _lastTranslationCameraX = float.NaN;
+        private float _lastTranslationCameraY = float.NaN;
         private float _truckCameraAvoidanceLift;
         private float _truckCameraAvoidanceVelocity;
         private bool _useGouraudShading;
@@ -98,12 +108,17 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             _cloudChunks = new VoxelChunk[MaxVisibleChunks];
             _birdChunks = new VoxelChunk[MaxVisibleChunks];
             _volcanoSmokeChunks = new VoxelChunk[MaxVisibleChunks];
+            _candidateBuffer = new ChunkCandidate[MaxVisibleChunks];
             _terrainChunkCache = new Dictionary<ChunkCacheKey, VoxelChunk>();
             _waterChunkCache = new Dictionary<ChunkCacheKey, WaterChunkCacheEntry>();
             _visibleChunkWorlds = new Matrix[MaxVisibleChunks];
             _visibleChunkKeys = new ChunkCacheKey[MaxVisibleChunks];
+            _visibleTerrainCacheVersions = new int[MaxVisibleChunks];
+            _visibleWaterTimeBuckets = new int[MaxVisibleChunks];
+            _visibleWaterReducedDetail = new bool[MaxVisibleChunks];
             _shipChunk = new VoxelChunk();
             _shipParticleChunk = new VoxelChunk(); 
+            _trafficChunk = new VoxelChunk();
             _platformChunks = new VoxelChunk[MaxVisibleChunks];
             _platformSmokeChunks = new VoxelChunk[MaxVisibleChunks];
             for (var index = 0; index < _chunks.Length; index++)
@@ -129,7 +144,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             }
 
             _useGouraudShading = useGouraudShading;
-            _terrainChunkCache?.Clear();
+            InvalidateTerrainChunkCache();
         }
 
         public void Render(ProceduralWorldMap worldMap, Vector2 cameraPosition, float heading, float pitch, float altitude, float maxFlightAltitude, float time, bool payloadReleased, IReadOnlyList<OilPlatformInstance> oilPlatforms, MissileWorldRenderState? missile, IReadOnlyList<MissileDebrisParticle> missileDebris)
@@ -145,7 +160,8 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                     true,
                     new TruckWorldRenderState(Vector2.Zero, 0f, 0f, 0f, 0f, false),
                     false,
-                    CubeSize * 7.4f),
+                    CubeSize * 7.4f,
+                    Array.Empty<TrafficCarRenderState>()),
                 time,
                 payloadReleased,
                 oilPlatforms,
@@ -253,10 +269,12 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             PopulateVisibleTownDefenseChunks(worldMap, cameraPosition, visibleChunkCount);
             PopulateVisibleVolcanoSmokeChunks(worldMap, visibleChunkCount, time);
             PopulateMissileEffects(cameraPosition, missile, missileDebris);
+            PopulateTrafficChunk(cameraPosition, viewState.TrafficCars);
             if (viewState.RenderShip)
             {
+                var shipCameraDistance = GetShipCameraDistance();
                 PopulateShipChunks(
-                    cameraEye + (forward3 * ShipCameraDistance) + (cameraUp * ShipVerticalOffset) + (cameraRight3 * ShipHorizontalOffset),
+                    cameraEye + (forward3 * shipCameraDistance) + (cameraUp * ShipVerticalOffset) + (cameraRight3 * ShipHorizontalOffset),
                     cameraRight3,
                     cameraUp,
                     forward3);
@@ -460,6 +478,25 @@ namespace PETAR_PlanetExplorer.Modules.Maps
 
             foreach (var pass in _effect.CurrentTechnique.Passes)
             {
+                if (_trafficChunk.VertexCount == 0)
+                {
+                    continue;
+                }
+
+                _graphicsDevice.BlendState = BlendState.AlphaBlend;
+                _graphicsDevice.DepthStencilState = DepthStencilState.Default;
+                _effect.World = Matrix.Identity;
+                pass.Apply();
+
+                _graphicsDevice.DrawUserPrimitives(
+                    PrimitiveType.TriangleList,
+                    _trafficChunk.Vertices,
+                    0,
+                    _trafficChunk.VertexCount / 3);
+            }
+
+            foreach (var pass in _effect.CurrentTechnique.Passes)
+            {
                 if (_shipChunk.VertexCount == 0)
                 {
                     continue;
@@ -552,6 +589,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
         private int BuildVisibleChunks(ProceduralWorldMap worldMap, Vector2 cameraPosition, Vector2 forward, Vector2 right, float maxDistance, float viewWidth, float time, float downwardViewT)
         {
             EnsureRuntimeCaches();
+            EnsureTerrainCacheCurrent(worldMap);
             var quantizedWaterTime = GetQuantizedWaterTime(time, out var waterTimeBucket);
             if (waterTimeBucket != _activeWaterTimeBucket)
             {
@@ -565,24 +603,34 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             var downwardCoverageRadius = MathHelper.Lerp(MathF.Max(viewWidth, maxDistance) * 0.9f, maxDistance + (viewWidth * 1.15f), downwardViewT);
             var terrainCoverageRadius = MathHelper.Lerp(maxDistance + viewWidth, downwardCoverageRadius * 1.35f, downwardViewT);
             var waterCoverageRadius = MathHelper.Lerp(waterMaxDistance + waterViewWidth, downwardCoverageRadius * 1.1f, downwardViewT);
+            var terrainCullRadius = terrainCoverageRadius + ChunkSize;
+            var terrainCullRadiusSquared = terrainCullRadius * terrainCullRadius;
+            var waterCullRadius = waterCoverageRadius + WaterCullPadding;
+            var waterCullRadiusSquared = waterCullRadius * waterCullRadius;
+            var reducedDetailWaterRadius = waterCoverageRadius * 0.58f;
+            var reducedDetailWaterRadiusSquared = reducedDetailWaterRadius * reducedDetailWaterRadius;
             var chunkRadius = (int)MathF.Ceiling(terrainCoverageRadius / ChunkSize) + 2;
             var cameraChunkX = (int)MathF.Floor(cameraPosition.X / ChunkSize);
             var cameraChunkY = (int)MathF.Floor(cameraPosition.Y / ChunkSize);
-            var candidates = new ChunkCandidate[MaxVisibleChunks];
+            var candidates = _candidateBuffer;
             var candidateCount = 0;
+            var worstCandidateIndex = -1;
+            var worstCandidateScore = float.MinValue;
             var nearDetailVisibleCount = 0;
             var halfWorldWidth = _worldWidth * 0.5f;
             var halfWorldHeight = _worldHeight * 0.5f;
             var downwardView = downwardViewT > 0f;
             var inverseMaxDistance = 1f / Math.Max(1f, maxDistance);
             var inverseWaterMaxDistance = 1f / Math.Max(1f, waterMaxDistance);
+            Span<bool> reusedVisibleSlots = stackalloc bool[MaxVisibleChunks];
 
             for (var chunkY = cameraChunkY - chunkRadius; chunkY <= cameraChunkY + chunkRadius; chunkY++)
             {
                 for (var chunkX = cameraChunkX - chunkRadius; chunkX <= cameraChunkX + chunkRadius; chunkX++)
                 {
-                    var chunkCenter = new Vector2((chunkX * ChunkSize) + (ChunkSize * 0.5f), (chunkY * ChunkSize) + (ChunkSize * 0.5f));
-                    var offsetX = chunkCenter.X - cameraPosition.X;
+                    var chunkCenterX = (chunkX * ChunkSize) + (ChunkSize * 0.5f);
+                    var chunkCenterY = (chunkY * ChunkSize) + (ChunkSize * 0.5f);
+                    var offsetX = chunkCenterX - cameraPosition.X;
                     if (offsetX > halfWorldWidth)
                     {
                         offsetX -= _worldWidth;
@@ -592,7 +640,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                         offsetX += _worldWidth;
                     }
 
-                    var offsetY = chunkCenter.Y - cameraPosition.Y;
+                    var offsetY = chunkCenterY - cameraPosition.Y;
                     if (offsetY > halfWorldHeight)
                     {
                         offsetY -= _worldHeight;
@@ -605,7 +653,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                     var forwardDistance = (offsetX * forward.X) + (offsetY * forward.Y);
                     var radialDistanceSquared = (offsetX * offsetX) + (offsetY * offsetY);
                     var terrainVisible = downwardView
-                        ? radialDistanceSquared <= (terrainCoverageRadius + ChunkSize) * (terrainCoverageRadius + ChunkSize)
+                        ? radialDistanceSquared <= terrainCullRadiusSquared
                         : forwardDistance >= -ChunkSize && forwardDistance <= maxDistance + ChunkSize;
                     if (!terrainVisible)
                     {
@@ -613,10 +661,11 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                     }
 
                     var depthT = MathHelper.Clamp(forwardDistance * inverseMaxDistance, 0f, 1f);
-                    var lateralLimit = MathHelper.Lerp(ChunkSize * 4f, viewWidth, MathF.Pow(depthT, 0.82f));
+                    var depthCurve = MathF.Sqrt(depthT);
+                    var lateralLimit = (ChunkSize * 4f) + ((viewWidth - (ChunkSize * 4f)) * depthCurve);
                     var lateralDistance = MathF.Abs((offsetX * right.X) + (offsetY * right.Y));
                     var terrainWidthVisible = downwardView
-                        ? radialDistanceSquared <= (terrainCoverageRadius + ChunkSize) * (terrainCoverageRadius + ChunkSize)
+                        ? radialDistanceSquared <= terrainCullRadiusSquared
                         : lateralDistance <= lateralLimit + ChunkSize;
                     if (!terrainWidthVisible)
                     {
@@ -624,22 +673,23 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                     }
 
                     var waterDepthT = MathHelper.Clamp(forwardDistance * inverseWaterMaxDistance, 0f, 1f);
-                    var waterLateralLimit = MathHelper.Lerp(ChunkSize * 4f, waterViewWidth, MathF.Pow(waterDepthT, 0.82f));
+                    var waterDepthCurve = MathF.Sqrt(waterDepthT);
+                    var waterLateralLimit = (ChunkSize * 4f) + ((waterViewWidth - (ChunkSize * 4f)) * waterDepthCurve);
                     var waterVisible =
                         (downwardView
-                            ? radialDistanceSquared <= (waterCoverageRadius + WaterCullPadding) * (waterCoverageRadius + WaterCullPadding)
+                            ? radialDistanceSquared <= waterCullRadiusSquared
                             : forwardDistance >= -WaterCullPadding &&
                               forwardDistance <= waterMaxDistance + WaterCullPadding &&
                               lateralDistance <= waterLateralLimit + WaterCullPadding);
                     var waterReducedDetail = waterVisible && waterCullT > 0f &&
                         (downwardView
-                            ? radialDistanceSquared > (waterCoverageRadius * 0.58f) * (waterCoverageRadius * 0.58f)
+                            ? radialDistanceSquared > reducedDetailWaterRadiusSquared
                             : forwardDistance > waterMaxDistance * 0.58f || lateralDistance > waterViewWidth * 0.52f);
 
                     var candidateScore = downwardView
                         ? radialDistanceSquared
                         : forwardDistance + (lateralDistance * 0.35f);
-                    InsertCandidate(candidates, ref candidateCount, chunkX, chunkY, candidateScore, waterVisible, waterReducedDetail);
+                    InsertCandidate(candidates, ref candidateCount, chunkX, chunkY, candidateScore, waterVisible, waterReducedDetail, ref worstCandidateIndex, ref worstCandidateScore);
                 }
             }
 
@@ -647,9 +697,18 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             {
                 var candidate = candidates[index];
                 var cacheKey = GetChunkCacheKey(candidate.ChunkX, candidate.ChunkY);
+                var reusedVisibleSlot = index < _lastVisibleChunkCount
+                    && _visibleChunkKeys[index].Equals(cacheKey)
+                    && _visibleTerrainCacheVersions[index] == _terrainCacheVersion
+                    && _chunks[index] != null;
+                reusedVisibleSlots[index] = reusedVisibleSlot;
                 _visibleChunkKeys[index] = cacheKey;
-                _visibleChunkWorlds[index] = Matrix.CreateTranslation(GetChunkTranslation(cameraPosition, candidate.ChunkX, candidate.ChunkY));
-                _chunks[index] = GetOrCreateTerrainChunk(worldMap, cacheKey);
+                _visibleChunkWorlds[index] = GetChunkWorldMatrix(cameraPosition, candidate.ChunkX, candidate.ChunkY);
+                if (!reusedVisibleSlot)
+                {
+                    _chunks[index] = GetOrCreateTerrainChunk(worldMap, cacheKey);
+                    _visibleTerrainCacheVersions[index] = _terrainCacheVersion;
+                }
             }
 
             for (var index = 0; index < candidateCount; index++)
@@ -661,7 +720,17 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                     var shouldRefreshNearDetailWater = candidate.WaterReducedDetail || (nearDetailVisibleCount >= _nearDetailRefreshCursor && nearDetailVisibleCount < _nearDetailRefreshCursor + NearDetailWaterRefreshBudget);
                     if (worldMap.HasSurfaceWater)
                     {
-                        _waterChunks[index] = GetOrCreateWaterChunk(worldMap, cacheKey, quantizedTime: quantizedWaterTime, timeBucket: waterTimeBucket, reducedDetail: candidate.WaterReducedDetail, refreshOutdatedChunk: shouldRefreshNearDetailWater);
+                        var canReuseVisibleWaterChunk = reusedVisibleSlots[index]
+                            && _waterChunks[index] != null
+                            && _visibleWaterTimeBuckets[index] == waterTimeBucket
+                            && _visibleWaterReducedDetail[index] == candidate.WaterReducedDetail;
+                        if (!canReuseVisibleWaterChunk)
+                        {
+                            _waterChunks[index] = GetOrCreateWaterChunk(worldMap, cacheKey, quantizedTime: quantizedWaterTime, timeBucket: waterTimeBucket, reducedDetail: candidate.WaterReducedDetail, refreshOutdatedChunk: shouldRefreshNearDetailWater);
+                        }
+
+                        _visibleWaterTimeBuckets[index] = waterTimeBucket;
+                        _visibleWaterReducedDetail[index] = candidate.WaterReducedDetail;
                         if (!candidate.WaterReducedDetail)
                         {
                             nearDetailVisibleCount++;
@@ -670,11 +739,15 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                     else
                     {
                         _waterChunks[index] = _emptyWaterChunk;
+                        _visibleWaterTimeBuckets[index] = int.MinValue;
+                        _visibleWaterReducedDetail[index] = false;
                     }
                 }
                 else
                 {
                     _waterChunks[index] = _emptyWaterChunk;
+                    _visibleWaterTimeBuckets[index] = int.MinValue;
+                    _visibleWaterReducedDetail[index] = false;
                 }
 
                 if (_cloudChunks != null && worldMap.HasSurfaceWater)
@@ -702,6 +775,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                 _nearDetailRefreshCursor = Math.Min(_nearDetailRefreshCursor + NearDetailWaterRefreshBudget, nearDetailVisibleCount);
             }
 
+            _lastVisibleChunkCount = candidateCount;
             return candidateCount;
         }
 
@@ -760,6 +834,28 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             _waterChunkCache ??= new Dictionary<ChunkCacheKey, WaterChunkCacheEntry>();
             _visibleChunkWorlds ??= new Matrix[MaxVisibleChunks];
             _visibleChunkKeys ??= new ChunkCacheKey[MaxVisibleChunks];
+            _visibleTerrainCacheVersions ??= new int[MaxVisibleChunks];
+            _visibleWaterTimeBuckets ??= new int[MaxVisibleChunks];
+            _visibleWaterReducedDetail ??= new bool[MaxVisibleChunks];
+            _candidateBuffer ??= new ChunkCandidate[MaxVisibleChunks];
+        }
+
+        private void EnsureTerrainCacheCurrent(ProceduralWorldMap worldMap)
+        {
+            if (_terrainCacheSeed == worldMap.Seed)
+            {
+                return;
+            }
+
+            InvalidateTerrainChunkCache();
+            _terrainCacheSeed = worldMap.Seed;
+        }
+
+        private void InvalidateTerrainChunkCache()
+        {
+            _terrainChunkCache?.Clear();
+            _terrainCacheVersion++;
+            _lastVisibleChunkCount = 0;
         }
 
         private VoxelChunk GetOrCreateTerrainChunk(ProceduralWorldMap worldMap, ChunkCacheKey cacheKey)
@@ -1232,9 +1328,42 @@ namespace PETAR_PlanetExplorer.Modules.Maps
 
         private Vector3 GetChunkTranslation(Vector2 cameraPosition, int chunkX, int chunkY)
         {
-            var chunkOrigin = new Vector2(chunkX * ChunkSize, chunkY * ChunkSize);
-            var wrappedOffset = GetWrappedOffset(chunkOrigin - cameraPosition);
-            return new Vector3(wrappedOffset.X * CubeSize, 0f, wrappedOffset.Y * CubeSize);
+            var offsetX = (chunkX * ChunkSize) - cameraPosition.X;
+            var halfWorldWidth = _worldWidth * 0.5f;
+            if (offsetX > halfWorldWidth)
+            {
+                offsetX -= _worldWidth;
+            }
+            else if (offsetX < -halfWorldWidth)
+            {
+                offsetX += _worldWidth;
+            }
+
+            var offsetY = (chunkY * ChunkSize) - cameraPosition.Y;
+            var halfWorldHeight = _worldHeight * 0.5f;
+            if (offsetY > halfWorldHeight)
+            {
+                offsetY -= _worldHeight;
+            }
+            else if (offsetY < -halfWorldHeight)
+            {
+                offsetY += _worldHeight;
+            }
+
+            return new Vector3(offsetX * CubeSize, 0f, offsetY * CubeSize);
+        }
+
+        private Matrix GetChunkWorldMatrix(Vector2 cameraPosition, int chunkX, int chunkY)
+        {
+            var translation = GetChunkTranslation(cameraPosition, chunkX, chunkY);
+            if (cameraPosition.X == _lastTranslationCameraX && cameraPosition.Y == _lastTranslationCameraY)
+            {
+                return Matrix.CreateTranslation(translation);
+            }
+
+            _lastTranslationCameraX = cameraPosition.X;
+            _lastTranslationCameraY = cameraPosition.Y;
+            return Matrix.CreateTranslation(translation);
         }
 
         private static int WrapChunkStart(int chunkCoordinate, int size)
@@ -1636,33 +1765,50 @@ namespace PETAR_PlanetExplorer.Modules.Maps
                 color.A);
         }
 
-        private void InsertCandidate(ChunkCandidate[] candidates, ref int candidateCount, int chunkX, int chunkY, float score, bool waterVisible, bool waterReducedDetail)
+        private void InsertCandidate(ChunkCandidate[] candidates, ref int candidateCount, int chunkX, int chunkY, float score, bool waterVisible, bool waterReducedDetail, ref int worstCandidateIndex, ref float worstCandidateScore)
         {
-            var insertIndex = candidateCount;
+            var candidate = new ChunkCandidate(chunkX, chunkY, score, waterVisible, waterReducedDetail);
             if (candidateCount < candidates.Length)
             {
+                var insertIndex = candidateCount;
+                while (insertIndex > 0 && candidates[insertIndex - 1].Score > score)
+                {
+                    candidates[insertIndex] = candidates[insertIndex - 1];
+                    insertIndex--;
+                }
+
+                candidates[insertIndex] = candidate;
                 candidateCount++;
+                if (candidateCount == 0 || score >= worstCandidateScore)
+                {
+                    worstCandidateIndex = candidateCount - 1;
+                    worstCandidateScore = score;
+                }
+
+                worstCandidateIndex = candidateCount - 1;
+                worstCandidateScore = candidates[worstCandidateIndex].Score;
+                return;
             }
-            else if (score >= candidates[candidates.Length - 1].Score)
+
+            if (score >= worstCandidateScore)
             {
                 return;
             }
-            else
+
+            candidates[worstCandidateIndex] = candidate;
+            while (worstCandidateIndex > 0 && candidates[worstCandidateIndex - 1].Score > score)
             {
-                insertIndex = candidates.Length - 1;
+                candidates[worstCandidateIndex] = candidates[worstCandidateIndex - 1];
+                worstCandidateIndex--;
             }
 
-            while (insertIndex > 0 && candidates[insertIndex - 1].Score > score)
+            candidates[worstCandidateIndex] = candidate;
+            worstCandidateIndex = candidateCount - 1;
+            worstCandidateScore = candidates[worstCandidateIndex].Score;
+            while (worstCandidateIndex > 0 && candidates[worstCandidateIndex - 1].Score > worstCandidateScore)
             {
-                if (insertIndex < candidates.Length)
-                {
-                    candidates[insertIndex] = candidates[insertIndex - 1];
-                }
-
-                insertIndex--;
+                worstCandidateIndex--;
             }
-
-            candidates[insertIndex] = new ChunkCandidate(chunkX, chunkY, score, waterVisible, waterReducedDetail);
         }
 
         private Vector2 GetWrappedOffset(Vector2 offset)
@@ -1856,8 +2002,10 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             }
         }
 
-        public readonly record struct WorldViewState(Vector2 CameraPosition, float Heading, float Pitch, float Altitude, float MaxFlightAltitude, bool RenderShip, TruckWorldRenderState Truck, bool UseTruckCamera, float TruckCameraDistance);
+        public readonly record struct WorldViewState(Vector2 CameraPosition, float Heading, float Pitch, float Altitude, float MaxFlightAltitude, bool RenderShip, TruckWorldRenderState Truck, bool UseTruckCamera, float TruckCameraDistance, IReadOnlyList<TrafficCarRenderState> TrafficCars);
 
         public readonly record struct TruckWorldRenderState(Vector2 Position, float WorldY, float Heading, float WheelRotation, float Pitch, bool IsVisible);
+
+        public readonly record struct TrafficCarRenderState(Vector2 Position, float WorldY, float Heading, float Pitch, float Bank, Color Color);
     }
 }

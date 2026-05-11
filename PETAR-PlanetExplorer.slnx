@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="BenchmarkSuite1/BenchmarkSuite1.csproj" />
+  <Project Path="BenchmarkSuiteF7/BenchmarkSuiteF7.csproj" />
   <Project Path="PETAR-PlanetExplorer/PETAR-PlanetExplorer.csproj" />
   <Project Path="VoxelPrototype.Core/VoxelPrototype.Core.csproj" />
 </Solution>

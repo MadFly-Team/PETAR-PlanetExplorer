@@ -7,10 +7,13 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
 {
     public sealed class VoxelRenderer : IDisposable
     {
-        private const float HorizontalCubeSize = 1f;
+        public const float HorizontalWorldScale = 3f;
+        private const float HorizontalCubeSize = HorizontalWorldScale;
         private const float VerticalCubeSize = 2f;
         private const float AmbientLight = 0.42f;
         private const float DiffuseLight = 0.58f;
+        private static readonly Vector3 EarthFogLowColor = new Vector3(0.5294118f, 0.80784315f, 0.92156863f);
+        private static readonly Vector3 EarthFogHighColor = new Vector3(0.03529412f, 0.10980392f, 0.25882354f);
         private static readonly int[] WarmupLodSteps = [1, 2, 4];
         private static readonly Vector3 SunLightDirection = Vector3.Normalize(new Vector3(-0.52f, 0.74f, -0.42f));
 
@@ -24,7 +27,8 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
             {
                 VertexColorEnabled = true,
                 LightingEnabled = false,
-                TextureEnabled = false
+                TextureEnabled = false,
+                FogEnabled = true
             };
         }
 
@@ -40,21 +44,30 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
                 return;
             }
 
+            var verticalRenderOrigin = VoxelWorldBuilder.GetRenderVerticalOrigin(voxelWorld.HeightLimit) * VerticalCubeSize;
+            var altitudeRatio = MathHelper.Clamp(cameraPosition.Y / 172f, 0f, 1f);
             _effect.View = view;
             _effect.Projection = projection;
             _effect.World = Matrix.Identity;
+            _effect.FogColor = Vector3.Lerp(EarthFogLowColor, EarthFogHighColor, altitudeRatio);
             _graphicsDevice.BlendState = BlendState.Opaque;
             _graphicsDevice.DepthStencilState = DepthStencilState.Default;
             _graphicsDevice.RasterizerState = RasterizerState.CullNone;
 
             var frustum = new BoundingFrustum(view * projection);
             var maxViewDistance = GetMaxViewDistance(cameraPosition.Y);
+            var fogDistance = GetFogDistance(cameraPosition.Y);
             var maxViewDistanceSquared = maxViewDistance * maxViewDistance;
+            var highAltitudeFogT = MathHelper.Clamp((altitudeRatio - 0.7f) / 0.3f, 0f, 1f);
+            var fogStart = MathHelper.Lerp(140f, 190f, altitudeRatio) * 0.72f;
+            var fogEnd = (fogDistance * MathHelper.Lerp(1.65f, 2.15f, altitudeRatio)) * 0.72f;
+            _effect.FogStart = MathHelper.Lerp(fogStart, 82f * 0.72f, highAltitudeFogT);
+            _effect.FogEnd = MathHelper.Lerp(fogEnd, fogDistance * 0.72f, highAltitudeFogT);
 
             foreach (var chunkEntry in voxelWorld.Chunks)
             {
                 var chunk = chunkEntry.Value;
-                var chunkBounds = GetChunkBounds(chunk);
+                var chunkBounds = GetChunkBounds(chunk, verticalRenderOrigin);
                 if (frustum.Contains(chunkBounds) == ContainmentType.Disjoint)
                 {
                     continue;
@@ -68,7 +81,7 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
                 }
 
                 var lodStep = GetLodStep(distanceSquared);
-                var vertices = GetOrBuildChunkMesh(voxelWorld, chunk, lodStep);
+                var vertices = GetOrBuildChunkMesh(voxelWorld, chunk, lodStep, verticalRenderOrigin);
 
                 if (vertices.Length == 0)
                 {
@@ -91,12 +104,13 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
             }
 
             var warmedMeshes = 0;
+            var verticalRenderOrigin = VoxelWorldBuilder.GetRenderVerticalOrigin(voxelWorld.HeightLimit) * VerticalCubeSize;
             var maxViewDistance = GetMaxViewDistance(cameraPosition.Y) + (VoxelConstants.ChunkSize * HorizontalCubeSize * 2f);
             var maxViewDistanceSquared = maxViewDistance * maxViewDistance;
             foreach (var chunkEntry in voxelWorld.Chunks)
             {
                 var chunk = chunkEntry.Value;
-                var chunkBounds = GetChunkBounds(chunk);
+                var chunkBounds = GetChunkBounds(chunk, verticalRenderOrigin);
                 var chunkCenter = chunkBounds.Min + ((chunkBounds.Max - chunkBounds.Min) * 0.5f);
                 var distanceSquared = Vector3.DistanceSquared(cameraPosition, chunkCenter);
                 if (distanceSquared > maxViewDistanceSquared)
@@ -104,15 +118,27 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
                     continue;
                 }
 
+                var targetLodStep = GetLodStep(distanceSquared);
+                var warmedFallback = false;
                 for (var lodIndex = 0; lodIndex < WarmupLodSteps.Length; lodIndex++)
                 {
                     var lodStep = WarmupLodSteps[lodIndex];
+                    if (lodStep != targetLodStep)
+                    {
+                        if (warmedFallback || lodStep <= targetLodStep)
+                        {
+                            continue;
+                        }
+
+                        warmedFallback = true;
+                    }
+
                     if (chunk.TryGetCachedMesh(lodStep, out _) && !chunk.IsDirty)
                     {
                         continue;
                     }
 
-                    GetOrBuildChunkMesh(voxelWorld, chunk, lodStep);
+                    GetOrBuildChunkMesh(voxelWorld, chunk, lodStep, verticalRenderOrigin);
                     warmedMeshes++;
                 }
             }
@@ -120,13 +146,14 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
             return warmedMeshes;
         }
 
-        private static BoundingBox GetChunkBounds(VoxelChunk chunk)
+        private static BoundingBox GetChunkBounds(VoxelChunk chunk, float verticalRenderOrigin)
         {
             var halfExtents = new Vector3(HorizontalCubeSize * 0.5f, VerticalCubeSize * 0.5f, HorizontalCubeSize * 0.5f);
             var min = ToRenderPosition(
                 chunk.Key.X * VoxelConstants.ChunkSize,
                 chunk.Key.Y * VoxelConstants.ChunkSize,
-                chunk.Key.Z * VoxelConstants.ChunkSize) - halfExtents;
+                chunk.Key.Z * VoxelConstants.ChunkSize,
+                verticalRenderOrigin) - halfExtents;
             var max = min + new Vector3(
                 VoxelConstants.ChunkSize * HorizontalCubeSize,
                 VoxelConstants.ChunkSize * VerticalCubeSize,
@@ -136,7 +163,14 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
 
         private static float GetMaxViewDistance(float cameraHeight)
         {
-            return MathHelper.Lerp(240f, 1200f, MathHelper.Clamp(cameraHeight / Math.Max(1f, VoxelConstants.WorldHeight), 0f, 1f));
+            var altitudeRatio = MathHelper.Clamp(cameraHeight / 172f, 0f, 1f);
+            return MathHelper.Lerp(320f, 700f, altitudeRatio);
+        }
+
+        private static float GetFogDistance(float cameraHeight)
+        {
+            var altitudeRatio = MathHelper.Clamp(cameraHeight / 172f, 0f, 1f);
+            return MathHelper.Lerp(160f, 280f, altitudeRatio);
         }
 
         private static int GetLodStep(float distanceSquared)
@@ -154,11 +188,11 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
             return 1;
         }
 
-        private static VertexPositionColor[] GetOrBuildChunkMesh(VoxelWorld voxelWorld, VoxelChunk chunk, int lodStep)
+        private static VertexPositionColor[] GetOrBuildChunkMesh(VoxelWorld voxelWorld, VoxelChunk chunk, int lodStep, float verticalRenderOrigin)
         {
             if (!chunk.TryGetCachedMesh(lodStep, out var vertices) || chunk.IsDirty)
             {
-                vertices = VoxelMeshBuilder.BuildVertices(voxelWorld, chunk, lodStep);
+                vertices = VoxelMeshBuilder.BuildVertices(voxelWorld, chunk, lodStep, verticalRenderOrigin);
                 chunk.UpdateCachedMesh(lodStep, vertices);
             }
 
@@ -170,9 +204,9 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
             _effect.Dispose();
         }
 
-        private static Vector3 ToRenderPosition(float voxelX, float voxelY, float voxelZ)
+        private static Vector3 ToRenderPosition(float voxelX, float voxelY, float voxelZ, float verticalRenderOrigin)
         {
-            return new Vector3(voxelX * HorizontalCubeSize, voxelZ * VerticalCubeSize, voxelY * HorizontalCubeSize);
+            return new Vector3(voxelX * HorizontalCubeSize, (voxelZ * VerticalCubeSize) - verticalRenderOrigin, voxelY * HorizontalCubeSize);
         }
 
         private static class VoxelMeshBuilder
@@ -186,15 +220,24 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
                 (0, 0, 1, Face.Top),
                 (0, 0, -1, Face.Bottom)
             ];
-
-            public static VertexPositionColor[] BuildVertices(VoxelWorld voxelWorld, VoxelChunk chunk, int lodStep)
+            private static readonly MaterialFaceColors[] FaceColorsByMaterial = CreateFaceColorsByMaterial();
+            public static VertexPositionColor[] BuildVertices(VoxelWorld voxelWorld, VoxelChunk chunk, int lodStep, float verticalRenderOrigin)
             {
                 lodStep = Math.Max(1, lodStep);
-                var builder = new List<VertexPositionColor>();
+                var cellCountPerAxis = VoxelConstants.ChunkSize / lodStep;
+                var estimatedMaxVisibleFaces = cellCountPerAxis * cellCountPerAxis * 6;
+                var builder = new List<VertexPositionColor>(estimatedMaxVisibleFaces * 6);
+                var chunkWorldX = chunk.Key.X * VoxelConstants.ChunkSize;
+                var chunkWorldY = chunk.Key.Y * VoxelConstants.ChunkSize;
+                var chunkWorldZ = chunk.Key.Z * VoxelConstants.ChunkSize;
                 var chunkOrigin = ToRenderPosition(
-                    chunk.Key.X * VoxelConstants.ChunkSize,
-                    chunk.Key.Y * VoxelConstants.ChunkSize,
-                    chunk.Key.Z * VoxelConstants.ChunkSize);
+                    chunkWorldX,
+                    chunkWorldY,
+                    chunkWorldZ,
+                    verticalRenderOrigin);
+                var cubeWidth = HorizontalCubeSize * lodStep;
+                var cubeHeight = VerticalCubeSize * lodStep;
+                var centerOffset = (lodStep - 1) * 0.5f;
 
                 for (var z = 0; z < VoxelConstants.ChunkSize; z += lodStep)
                 {
@@ -202,7 +245,7 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
                     {
                         for (var x = 0; x < VoxelConstants.ChunkSize; x += lodStep)
                         {
-                            AppendCellVertices(builder, voxelWorld, chunk, chunkOrigin, x, y, z, lodStep);
+                            AppendCellVertices(builder, voxelWorld, chunk, chunkOrigin, chunkWorldX, chunkWorldY, chunkWorldZ, x, y, z, lodStep, cubeWidth, cubeHeight, centerOffset);
                         }
                     }
                 }
@@ -210,7 +253,7 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
                 return builder.ToArray();
             }
 
-            private static void AppendCellVertices(List<VertexPositionColor> builder, VoxelWorld voxelWorld, VoxelChunk chunk, Vector3 chunkOrigin, int startX, int startY, int startZ, int lodStep)
+            private static void AppendCellVertices(List<VertexPositionColor> builder, VoxelWorld voxelWorld, VoxelChunk chunk, Vector3 chunkOrigin, int chunkWorldX, int chunkWorldY, int chunkWorldZ, int startX, int startY, int startZ, int lodStep, float cubeWidth, float cubeHeight, float centerOffset)
             {
                 var fillState = GetCellFillState(chunk, startX, startY, startZ, lodStep, out var block);
                 if (fillState == CellFillState.Empty)
@@ -227,7 +270,10 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
                         {
                             for (var x = startX; x < Math.Min(startX + lodStep, VoxelConstants.ChunkSize); x += childStep)
                             {
-                                AppendCellVertices(builder, voxelWorld, chunk, chunkOrigin, x, y, z, childStep);
+                                var childCubeWidth = HorizontalCubeSize * childStep;
+                                var childCubeHeight = VerticalCubeSize * childStep;
+                                var childCenterOffset = (childStep - 1) * 0.5f;
+                                AppendCellVertices(builder, voxelWorld, chunk, chunkOrigin, chunkWorldX, chunkWorldY, chunkWorldZ, x, y, z, childStep, childCubeWidth, childCubeHeight, childCenterOffset);
                             }
                         }
                     }
@@ -235,28 +281,60 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
                     return;
                 }
 
-                var color = GetColor(block.Material);
-                var worldX = (chunk.Key.X * VoxelConstants.ChunkSize) + startX;
-                var worldY = (chunk.Key.Y * VoxelConstants.ChunkSize) + startY;
-                var worldZ = (chunk.Key.Z * VoxelConstants.ChunkSize) + startZ;
-                var cubeWidth = HorizontalCubeSize * lodStep;
-                var cubeHeight = VerticalCubeSize * lodStep;
+                var worldX = chunkWorldX + startX;
+                var worldY = chunkWorldY + startY;
+                var worldZ = chunkWorldZ + startZ;
                 var cubePosition = chunkOrigin + ToRenderPosition(
-                    startX + ((lodStep - 1) * 0.5f),
-                    startY + ((lodStep - 1) * 0.5f),
-                    startZ + ((lodStep - 1) * 0.5f));
-                AppendVisibleFaces(builder, voxelWorld, cubePosition, worldX, worldY, worldZ, color, lodStep, cubeWidth, cubeHeight);
+                    startX + centerOffset,
+                    startY + centerOffset,
+                    startZ + centerOffset,
+                    0f);
+                AppendVisibleFaces(builder, voxelWorld, chunk, cubePosition, startX, startY, startZ, worldX, worldY, worldZ, block.Material, lodStep, cubeWidth, cubeHeight);
             }
 
             private static CellFillState GetCellFillState(VoxelChunk chunk, int startX, int startY, int startZ, int lodStep, out VoxelBlock block)
             {
+                block = chunk.GetBlock(startX, startY, startZ);
+                if (lodStep == 1)
+                {
+                    return block.IsSolid ? CellFillState.Solid : CellFillState.Empty;
+                }
+
+                var endZ = Math.Min(startZ + lodStep, VoxelConstants.ChunkSize);
+                var endY = Math.Min(startY + lodStep, VoxelConstants.ChunkSize);
+                var endX = Math.Min(startX + lodStep, VoxelConstants.ChunkSize);
+                if (block.IsSolid)
+                {
+                    for (var z = startZ; z < endZ; z++)
+                    {
+                        for (var y = startY; y < endY; y++)
+                        {
+                            for (var x = startX; x < endX; x++)
+                            {
+                                if (x == startX && y == startY && z == startZ)
+                                {
+                                    continue;
+                                }
+
+                                var candidate = chunk.GetBlock(x, y, z);
+                                if (!candidate.IsSolid || !block.Equals(candidate))
+                                {
+                                    return CellFillState.Mixed;
+                                }
+                            }
+                        }
+                    }
+
+                    return CellFillState.Solid;
+                }
+
                 block = default;
                 var foundSolid = false;
-                for (var z = startZ; z < Math.Min(startZ + lodStep, VoxelConstants.ChunkSize); z++)
+                for (var z = startZ; z < endZ; z++)
                 {
-                    for (var y = startY; y < Math.Min(startY + lodStep, VoxelConstants.ChunkSize); y++)
+                    for (var y = startY; y < endY; y++)
                     {
-                        for (var x = startX; x < Math.Min(startX + lodStep, VoxelConstants.ChunkSize); x++)
+                        for (var x = startX; x < endX; x++)
                         {
                             var candidate = chunk.GetBlock(x, y, z);
                             if (!candidate.IsSolid)
@@ -287,7 +365,7 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
                 return foundSolid ? CellFillState.Solid : CellFillState.Empty;
             }
 
-            private static void AppendVisibleFaces(List<VertexPositionColor> builder, VoxelWorld voxelWorld, Vector3 position, int worldX, int worldY, int worldZ, Color color, int lodStep, float cubeWidth, float cubeHeight)
+            private static void AppendVisibleFaces(List<VertexPositionColor> builder, VoxelWorld voxelWorld, VoxelChunk chunk, Vector3 position, int localX, int localY, int localZ, int worldX, int worldY, int worldZ, VoxelMaterial material, int lodStep, float cubeWidth, float cubeHeight)
             {
                 var halfWidth = cubeWidth * 0.5f;
                 var halfHeight = cubeHeight * 0.5f;
@@ -306,16 +384,11 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
                 var rbf = new Vector3(right, bottom, front);
                 var rtb = new Vector3(right, top, back);
                 var rtf = new Vector3(right, top, front);
-                var frontColor = ShadeFace(color, Vector3.Forward);
-                var backColor = ShadeFace(color, Vector3.Backward);
-                var leftColor = ShadeFace(color, Vector3.Left);
-                var rightColor = ShadeFace(color, Vector3.Right);
-                var topColor = ShadeFace(color, Vector3.Up);
-                var bottomColor = ShadeFace(color, Vector3.Down);
+                var faceColors = FaceColorsByMaterial[(int)material];
 
                 foreach (var neighbor in NeighborFaces)
                 {
-                    if (HasSolidNeighbor(voxelWorld, worldX, worldY, worldZ, neighbor.X, neighbor.Y, neighbor.Z, lodStep))
+                    if (HasSolidNeighbor(voxelWorld, chunk, localX, localY, localZ, worldX, worldY, worldZ, neighbor.X, neighbor.Y, neighbor.Z, lodStep))
                     {
                         continue;
                     }
@@ -323,25 +396,43 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
                     switch (neighbor.Face)
                     {
                         case Face.Front:
-                            AppendQuad(builder, ltf, rtf, rbf, lbf, frontColor);
+                            AppendQuad(builder, ltf, rtf, rbf, lbf, faceColors.Front);
                             break;
                         case Face.Back:
-                            AppendQuad(builder, rbb, rtb, ltb, lbb, backColor);
+                            AppendQuad(builder, rbb, rtb, ltb, lbb, faceColors.Back);
                             break;
                         case Face.Left:
-                            AppendQuad(builder, lbf, ltf, ltb, lbb, leftColor);
+                            AppendQuad(builder, lbf, ltf, ltb, lbb, faceColors.Left);
                             break;
                         case Face.Right:
-                            AppendQuad(builder, rtb, rtf, rbf, rbb, rightColor);
+                            AppendQuad(builder, rtb, rtf, rbf, rbb, faceColors.Right);
                             break;
                         case Face.Top:
-                            AppendQuad(builder, ltb, ltf, rtf, rtb, topColor);
+                            AppendQuad(builder, ltb, ltf, rtf, rtb, faceColors.Top);
                             break;
                         case Face.Bottom:
-                            AppendQuad(builder, rbb, rbf, lbf, lbb, bottomColor);
+                            AppendQuad(builder, rbb, rbf, lbf, lbb, faceColors.Bottom);
                             break;
                     }
                 }
+            }
+
+            private static MaterialFaceColors[] CreateFaceColorsByMaterial()
+            {
+                var faceColors = new MaterialFaceColors[Enum.GetValues<VoxelMaterial>().Length];
+                foreach (var material in Enum.GetValues<VoxelMaterial>())
+                {
+                    var baseColor = GetColor(material);
+                    faceColors[(int)material] = new MaterialFaceColors(
+                        ShadeFace(baseColor, Vector3.Forward),
+                        ShadeFace(baseColor, Vector3.Backward),
+                        ShadeFace(baseColor, Vector3.Left),
+                        ShadeFace(baseColor, Vector3.Right),
+                        ShadeFace(baseColor, Vector3.Up),
+                        ShadeFace(baseColor, Vector3.Down));
+                }
+
+                return faceColors;
             }
 
             private static Color ShadeFace(Color baseColor, Vector3 normal)
@@ -361,26 +452,213 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
                     color.A);
             }
 
-            private static bool HasSolidNeighbor(VoxelWorld voxelWorld, int worldX, int worldY, int worldZ, int offsetX, int offsetY, int offsetZ, int lodStep)
+            private static bool HasSolidNeighbor(VoxelWorld voxelWorld, VoxelChunk chunk, int localX, int localY, int localZ, int worldX, int worldY, int worldZ, int offsetX, int offsetY, int offsetZ, int lodStep)
             {
-                for (var z = 0; z < lodStep; z++)
+                var neighborLocalX = localX + (offsetX < 0 ? offsetX : offsetX * lodStep);
+                var neighborLocalY = localY + (offsetY < 0 ? offsetY : offsetY * lodStep);
+                var neighborLocalZ = localZ + (offsetZ < 0 ? offsetZ : offsetZ * lodStep);
+                if (lodStep == 1)
                 {
+                    if ((uint)neighborLocalX < VoxelConstants.ChunkSize
+                        && (uint)neighborLocalY < VoxelConstants.ChunkSize
+                        && (uint)neighborLocalZ < VoxelConstants.ChunkSize)
+                    {
+                        return chunk.GetBlock(neighborLocalX, neighborLocalY, neighborLocalZ).IsSolid;
+                    }
+
+                    if (TryGetNeighborChunk(voxelWorld, chunk, offsetX, offsetY, offsetZ, out var neighborChunk))
+                    {
+                        return neighborChunk.GetBlock(
+                            neighborLocalX < 0 ? VoxelConstants.ChunkSize - 1 : neighborLocalX >= VoxelConstants.ChunkSize ? 0 : neighborLocalX,
+                            neighborLocalY < 0 ? VoxelConstants.ChunkSize - 1 : neighborLocalY >= VoxelConstants.ChunkSize ? 0 : neighborLocalY,
+                            neighborLocalZ < 0 ? VoxelConstants.ChunkSize - 1 : neighborLocalZ >= VoxelConstants.ChunkSize ? 0 : neighborLocalZ).IsSolid;
+                    }
+
+                    return false;
+                }
+
+                var sampleBaseX = worldX + (offsetX < 0 ? offsetX : offsetX * lodStep);
+                var sampleBaseY = worldY + (offsetY < 0 ? offsetY : offsetY * lodStep);
+                var sampleBaseZ = worldZ + (offsetZ < 0 ? offsetZ : offsetZ * lodStep);
+
+                if (offsetX != 0)
+                {
+                    if (neighborLocalX >= 0 && neighborLocalX < VoxelConstants.ChunkSize)
+                    {
+                        for (var y = 0; y < lodStep; y++)
+                        {
+                            for (var z = 0; z < lodStep; z++)
+                            {
+                                if (chunk.GetBlock(neighborLocalX, localY + y, localZ + z).IsSolid)
+                                {
+                                    return true;
+                                }
+                            }
+                        }
+
+                        return false;
+                    }
+
+                    if (IsRangeWithinChunk(localY, lodStep)
+                        && IsRangeWithinChunk(localZ, lodStep)
+                        && TryGetNeighborChunk(voxelWorld, chunk, offsetX, 0, 0, out var neighborChunk))
+                    {
+                        return HasSolidOnXPlane(neighborChunk, neighborLocalX < 0 ? VoxelConstants.ChunkSize - 1 : 0, localY, localZ, lodStep);
+                    }
+
                     for (var y = 0; y < lodStep; y++)
                     {
-                        for (var x = 0; x < lodStep; x++)
+                        for (var z = 0; z < lodStep; z++)
                         {
-                            var sampleX = worldX + x + (offsetX < 0 ? offsetX : offsetX * lodStep);
-                            var sampleY = worldY + y + (offsetY < 0 ? offsetY : offsetY * lodStep);
-                            var sampleZ = worldZ + z + (offsetZ < 0 ? offsetZ : offsetZ * lodStep);
-                            if (voxelWorld.IsSolid(sampleX, sampleY, sampleZ))
+                            if (voxelWorld.IsSolid(sampleBaseX, sampleBaseY + y, sampleBaseZ + z))
                             {
                                 return true;
                             }
                         }
                     }
+
+                    return false;
+                }
+
+                if (offsetY != 0)
+                {
+                    if (neighborLocalY >= 0 && neighborLocalY < VoxelConstants.ChunkSize)
+                    {
+                        for (var x = 0; x < lodStep; x++)
+                        {
+                            for (var z = 0; z < lodStep; z++)
+                            {
+                                if (chunk.GetBlock(localX + x, neighborLocalY, localZ + z).IsSolid)
+                                {
+                                    return true;
+                                }
+                            }
+                        }
+
+                        return false;
+                    }
+
+                    if (IsRangeWithinChunk(localX, lodStep)
+                        && IsRangeWithinChunk(localZ, lodStep)
+                        && TryGetNeighborChunk(voxelWorld, chunk, 0, offsetY, 0, out var neighborChunk))
+                    {
+                        return HasSolidOnYPlane(neighborChunk, localX, neighborLocalY < 0 ? VoxelConstants.ChunkSize - 1 : 0, localZ, lodStep);
+                    }
+
+                    for (var x = 0; x < lodStep; x++)
+                    {
+                        for (var z = 0; z < lodStep; z++)
+                        {
+                            if (voxelWorld.IsSolid(sampleBaseX + x, sampleBaseY, sampleBaseZ + z))
+                            {
+                                return true;
+                            }
+                        }
+                    }
+
+                    return false;
+                }
+
+                if (neighborLocalZ >= 0 && neighborLocalZ < VoxelConstants.ChunkSize)
+                {
+                    for (var x = 0; x < lodStep; x++)
+                    {
+                        for (var y = 0; y < lodStep; y++)
+                        {
+                            if (chunk.GetBlock(localX + x, localY + y, neighborLocalZ).IsSolid)
+                            {
+                                return true;
+                            }
+                        }
+                    }
+
+                    return false;
+                }
+
+                if (IsRangeWithinChunk(localX, lodStep)
+                    && IsRangeWithinChunk(localY, lodStep)
+                    && TryGetNeighborChunk(voxelWorld, chunk, 0, 0, offsetZ, out var topBottomNeighborChunk))
+                {
+                    return HasSolidOnZPlane(topBottomNeighborChunk, localX, localY, neighborLocalZ < 0 ? VoxelConstants.ChunkSize - 1 : 0, lodStep);
+                }
+
+                for (var x = 0; x < lodStep; x++)
+                {
+                    for (var y = 0; y < lodStep; y++)
+                    {
+                        if (voxelWorld.IsSolid(sampleBaseX + x, sampleBaseY + y, sampleBaseZ))
+                        {
+                            return true;
+                        }
+                    }
                 }
 
                 return false;
+            }
+
+            private static bool TryGetNeighborChunk(VoxelWorld voxelWorld, VoxelChunk chunk, int offsetX, int offsetY, int offsetZ, out VoxelChunk neighborChunk)
+            {
+                return voxelWorld.TryGetChunk(new VoxelChunkKey(chunk.Key.X + offsetX, chunk.Key.Y + offsetY, chunk.Key.Z + offsetZ), out neighborChunk);
+            }
+
+            private static bool IsRangeWithinChunk(int start, int length)
+            {
+                return start >= 0 && start + length <= VoxelConstants.ChunkSize;
+            }
+
+            private static bool HasSolidOnXPlane(VoxelChunk chunk, int planeX, int startY, int startZ, int lodStep)
+            {
+                for (var y = 0; y < lodStep; y++)
+                {
+                    for (var z = 0; z < lodStep; z++)
+                    {
+                        if (chunk.GetBlock(planeX, startY + y, startZ + z).IsSolid)
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
+            }
+
+            private static bool HasSolidOnYPlane(VoxelChunk chunk, int startX, int planeY, int startZ, int lodStep)
+            {
+                for (var x = 0; x < lodStep; x++)
+                {
+                    for (var z = 0; z < lodStep; z++)
+                    {
+                        if (chunk.GetBlock(startX + x, planeY, startZ + z).IsSolid)
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
+            }
+
+            private static bool HasSolidOnZPlane(VoxelChunk chunk, int startX, int startY, int planeZ, int lodStep)
+            {
+                for (var x = 0; x < lodStep; x++)
+                {
+                    for (var y = 0; y < lodStep; y++)
+                    {
+                        if (chunk.GetBlock(startX + x, startY + y, planeZ).IsSolid)
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
+            }
+
+            private static bool IsWithinChunk(int x, int y, int z)
+            {
+                return x >= 0 && x < VoxelConstants.ChunkSize
+                    && y >= 0 && y < VoxelConstants.ChunkSize
+                    && z >= 0 && z < VoxelConstants.ChunkSize;
             }
 
             private static void AppendQuad(List<VertexPositionColor> builder, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color color)
@@ -421,6 +699,14 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
                 Solid,
                 Mixed
             }
+
+            private readonly record struct MaterialFaceColors(
+                Color Front,
+                Color Back,
+                Color Left,
+                Color Right,
+                Color Top,
+                Color Bottom);
         }
     }
 }
