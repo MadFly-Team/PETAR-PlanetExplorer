@@ -7,7 +7,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
     {
         private const float ShipCubeSize = CubeSize * 0.24f;
         private const float ShipCubeHeight = CubeHeight * 0.26f;
-        private const float ShipCameraDistance = CubeSize * 10.5f;
+        private const float ShipCameraDistanceStopped = CubeSize * 8.1f;
         private const float ShipVerticalOffset = -5f;
         private const float ShipHorizontalOffset = 0f;
         private const float ShipRollLimit = 0.5f;
@@ -27,7 +27,10 @@ namespace PETAR_PlanetExplorer.Modules.Maps
         private const float EngineParticleGravity = 5.5f;
         private static readonly Color ShipPrimaryColor = new Color(222, 222, 228);
         private static readonly Color ShipAccentColor = new Color(78, 78, 86);
-        private static readonly Color ShipCockpitColor = new Color(116, 150, 188);
+        private static readonly Color ShipCockpitColor = new Color(28, 34, 44);
+        private static readonly Color ShipTrimColor = new Color(246, 146, 86);
+        private static readonly Color ShipGlowColor = new Color(255, 180, 72);
+        private static readonly Color ShipShadowColor = new Color(34, 40, 52);
         private static readonly Color RopeColor = new Color(164, 148, 128);
         private static readonly Color PayloadPrimaryColor = new Color(154, 154, 160);
         private static readonly Color PayloadBorderColor = new Color(36, 36, 40);
@@ -56,6 +59,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             _engineParticles = new EngineParticle[MaxEngineParticles];
             _ship = new ShipState
             {
+                CameraDistance = ShipCameraDistanceStopped,
                 PayloadOffset = new Vector3(0f, -PayloadRopeLength, 0f),
                 RopeExtension = 1f
             };
@@ -87,6 +91,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             var speed = velocity.Length();
             var thrust = MathHelper.Clamp(speed / 12f, 0f, 1f);
             var targetRoll = MathHelper.Clamp((turnRate * 0.16f) + (Vector2.Dot(velocity, right) * 0.02f), -ShipRollLimit, ShipRollLimit);
+            var targetCameraDistance = ShipCameraDistanceStopped;
 
             if (payloadReleased && !_ship.PayloadReleased)
             {
@@ -99,6 +104,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
 
             if (deltaTime > 0f)
             {
+                _ship.CameraDistance = targetCameraDistance;
                 _ship.Roll = MathHelper.Lerp(_ship.Roll, targetRoll, MathHelper.Clamp(deltaTime * 4.5f, 0f, 1f));
 
                 if (!_ship.PayloadReleased)
@@ -150,6 +156,11 @@ namespace PETAR_PlanetExplorer.Modules.Maps
             _lastShipCameraPosition = cameraPosition;
             _lastShipHeading = heading;
             _lastShipUpdateTime = time;
+        }
+
+        private float GetShipCameraDistance()
+        {
+            return _ship.CameraDistance > 0f ? _ship.CameraDistance : ShipCameraDistanceStopped;
         }
 
         private void UpdateReleasedPayload(float deltaTime, float thrust)
@@ -234,60 +245,496 @@ namespace PETAR_PlanetExplorer.Modules.Maps
 
         private void AppendShipBody(VoxelChunk chunk, Vector3 center, Vector3 right, Vector3 up, Vector3 forward)
         {
-            for (var ringZ = -2; ringZ <= 2; ringZ++)
+            AppendShipMainHull(chunk, center, right, up, forward);
+            AppendShipCanopy(chunk, center, right, up, forward);
+            AppendShipCanopyFrameDetails(chunk, center, right, up, forward);
+            AppendShipEnginePods(chunk, center, right, up, forward);
+            AppendShipRearFins(chunk, center, right, up, forward);
+            AppendShipSurfaceIntakes(chunk, center, right, up, forward);
+            AppendShipEngineRings(chunk, center, right, up, forward);
+            AppendShipPanelLines(chunk, center, right, up, forward);
+            AppendShipGlowPanels(chunk, center, right, up, forward);
+        }
+
+        private void AppendShipMainHull(VoxelChunk chunk, Vector3 center, Vector3 right, Vector3 up, Vector3 forward)
+        {
+            Span<float> sectionZ = stackalloc float[] { -5.6f, -4.1f, -2.5f, -0.7f, 1.3f, 3.2f, 5.4f };
+            Span<float> sectionWidth = stackalloc float[] { 0.42f, 1.18f, 2.42f, 3.08f, 2.74f, 1.54f, 0.18f };
+            Span<float> sectionTop = stackalloc float[] { 0.18f, 0.34f, 0.52f, 0.72f, 0.88f, 0.46f, 0.12f };
+            Span<float> sectionSide = stackalloc float[] { -0.04f, 0.04f, 0.16f, 0.26f, 0.22f, 0.08f, -0.02f };
+            Span<float> sectionBottom = stackalloc float[] { -0.10f, -0.22f, -0.34f, -0.42f, -0.36f, -0.2f, -0.04f };
+            Span<Vector3> previousProfile = stackalloc Vector3[7];
+            Span<Vector3> currentProfile = stackalloc Vector3[7];
+            Span<Vector3> previousBelly = stackalloc Vector3[3];
+            Span<Vector3> currentBelly = stackalloc Vector3[3];
+
+            CreateHullSectionProfile(previousProfile, sectionZ[0], sectionWidth[0], sectionTop[0], sectionSide[0], sectionBottom[0]);
+            CreateHullBellyProfile(previousBelly, sectionZ[0], sectionWidth[0], sectionBottom[0]);
+            for (var index = 1; index < sectionZ.Length; index++)
             {
-                var ringDepthOffset = ringZ * ShipCubeSize * 0.78f;
-                var ringRadius = ringZ == 0 ? 4 : (Math.Abs(ringZ) == 1 ? 3 : 2);
-                for (var ringX = -ringRadius; ringX <= ringRadius; ringX++)
-                {
-                    var edge = Math.Abs(ringX) == ringRadius;
-                    var bandColor = edge ? ShipAccentColor : ShipPrimaryColor;
-                    AppendShipCube(
-                        chunk,
-                        center,
-                        right,
-                        up,
-                        forward,
-                        new Vector3(ringX * ShipCubeSize * 0.9f, 0f, ringDepthOffset),
-                        bandColor,
-                        ShipCubeSize * (edge ? 0.95f : 1.08f),
-                        ShipCubeHeight * (edge ? 0.8f : 0.92f));
-                }
+                CreateHullSectionProfile(currentProfile, sectionZ[index], sectionWidth[index], sectionTop[index], sectionSide[index], sectionBottom[index]);
+                CreateHullBellyProfile(currentBelly, sectionZ[index], sectionWidth[index], sectionBottom[index]);
+                AppendShipProfileStrip(chunk, center, right, up, forward, previousProfile[0], previousProfile[1], currentProfile[1], currentProfile[0], ShipShadowColor);
+                AppendShipProfileStrip(chunk, center, right, up, forward, previousProfile[1], previousProfile[2], currentProfile[2], currentProfile[1], ShipAccentColor);
+                AppendShipProfileStrip(chunk, center, right, up, forward, previousProfile[2], previousProfile[3], currentProfile[3], currentProfile[2], ShipPrimaryColor);
+                AppendShipProfileStrip(chunk, center, right, up, forward, previousProfile[3], previousProfile[4], currentProfile[4], currentProfile[3], ShipPrimaryColor);
+                AppendShipProfileStrip(chunk, center, right, up, forward, previousProfile[4], previousProfile[5], currentProfile[5], currentProfile[4], ShipAccentColor);
+                AppendShipProfileStrip(chunk, center, right, up, forward, previousProfile[5], previousProfile[6], currentProfile[6], currentProfile[5], ShipShadowColor);
+                AppendShipProfileStrip(chunk, center, right, up, forward, previousBelly[0], previousBelly[1], currentBelly[1], currentBelly[0], ShipShadowColor);
+                AppendShipProfileStrip(chunk, center, right, up, forward, previousBelly[1], previousBelly[2], currentBelly[2], currentBelly[1], ShipShadowColor);
+                currentProfile.CopyTo(previousProfile);
+                currentBelly.CopyTo(previousBelly);
             }
 
-            for (var domeZ = -1; domeZ <= 1; domeZ++)
+            for (var ridge = -1; ridge <= 4; ridge++)
             {
-                for (var domeX = -1; domeX <= 1; domeX++)
-                {
-                    var domeOffset = new Vector3(domeX * ShipCubeSize * 0.7f, ShipCubeHeight * 0.88f, domeZ * ShipCubeSize * 0.7f);
-                    var domeSize = (domeX == 0 && domeZ == 0) ? ShipCubeSize * 1.05f : ShipCubeSize * 0.82f;
-                    AppendShipCube(chunk, center, right, up, forward, domeOffset, ShipCockpitColor, domeSize, ShipCubeHeight * 0.8f);
-                }
+                var start = new Vector3(-ShipCubeSize * 0.08f, ShipCubeHeight * 0.5f, ridge * ShipCubeSize * 0.9f);
+                var end = new Vector3(ShipCubeSize * 0.08f, ShipCubeHeight * 0.5f, (ridge + 1) * ShipCubeSize * 0.9f);
+                AppendShipRibbon(chunk, center, right, up, forward, start, end, ShipCubeSize * 0.08f, ShipTrimColor);
+            }
+        }
+
+        private void AppendShipCanopy(VoxelChunk chunk, Vector3 center, Vector3 right, Vector3 up, Vector3 forward)
+        {
+            Span<float> canopyZ = stackalloc float[] { -0.2f, 0.8f, 1.8f, 2.8f, 3.5f };
+            Span<float> canopyWidth = stackalloc float[] { 1.26f, 1.56f, 1.46f, 1.04f, 0.46f };
+            Span<float> canopyBase = stackalloc float[] { 0.48f, 0.62f, 0.72f, 0.62f, 0.38f };
+            Span<float> canopyTop = stackalloc float[] { 1.1f, 1.34f, 1.46f, 1.16f, 0.62f };
+            Span<Vector3> previousProfile = stackalloc Vector3[5];
+            Span<Vector3> currentProfile = stackalloc Vector3[5];
+
+            CreateCanopySectionProfile(previousProfile, canopyZ[0], canopyWidth[0], canopyBase[0], canopyTop[0]);
+            for (var index = 1; index < canopyZ.Length; index++)
+            {
+                CreateCanopySectionProfile(currentProfile, canopyZ[index], canopyWidth[index], canopyBase[index], canopyTop[index]);
+                AppendShipProfileStrip(chunk, center, right, up, forward, previousProfile[0], previousProfile[1], currentProfile[1], currentProfile[0], ShipAccentColor);
+                AppendShipProfileStrip(chunk, center, right, up, forward, previousProfile[1], previousProfile[2], currentProfile[2], currentProfile[1], ShipCockpitColor);
+                AppendShipProfileStrip(chunk, center, right, up, forward, previousProfile[2], previousProfile[3], currentProfile[3], currentProfile[2], ShipCockpitColor);
+                AppendShipProfileStrip(chunk, center, right, up, forward, previousProfile[3], previousProfile[4], currentProfile[4], currentProfile[3], ShipAccentColor);
+                currentProfile.CopyTo(previousProfile);
             }
 
-            for (var undersideZ = -1; undersideZ <= 1; undersideZ++)
+            for (var canopyFrame = 0; canopyFrame < canopyZ.Length - 1; canopyFrame++)
             {
-                for (var undersideX = -2; undersideX <= 2; undersideX++)
-                {
-                    if (Math.Abs(undersideX) + Math.Abs(undersideZ) > 2)
-                    {
-                        continue;
-                    }
+                var frameStart = new Vector3(0f, canopyTop[canopyFrame] * ShipCubeHeight, canopyZ[canopyFrame] * ShipCubeSize);
+                var frameEnd = new Vector3(0f, canopyTop[canopyFrame + 1] * ShipCubeHeight, canopyZ[canopyFrame + 1] * ShipCubeSize);
+                AppendShipRibbon(chunk, center, right, up, forward, frameStart, frameEnd, ShipCubeSize * 0.06f, ShipShadowColor);
+            }
+        }
 
-                    AppendShipCube(
-                        chunk,
-                        center,
-                        right,
-                        up,
-                        forward,
-                        new Vector3(undersideX * ShipCubeSize * 0.65f, -ShipCubeHeight * 0.5f, undersideZ * ShipCubeSize * 0.65f),
-                        ShipAccentColor,
-                        ShipCubeSize * 0.72f,
-                        ShipCubeHeight * 0.52f);
+        private void AppendShipEnginePods(VoxelChunk chunk, Vector3 center, Vector3 right, Vector3 up, Vector3 forward)
+        {
+            for (var side = -1; side <= 1; side += 2)
+            {
+                Span<float> podZ = stackalloc float[] { -4.4f, -3.3f, -2.1f, -0.8f, 0.6f };
+                Span<float> podRadius = stackalloc float[] { 0.62f, 0.9f, 1.02f, 0.9f, 0.52f };
+                Span<float> podTop = stackalloc float[] { 0.18f, 0.28f, 0.34f, 0.24f, 0.08f };
+                Span<float> podBottom = stackalloc float[] { -0.24f, -0.28f, -0.34f, -0.28f, -0.14f };
+                Span<Vector3> previousProfile = stackalloc Vector3[5];
+                Span<Vector3> currentProfile = stackalloc Vector3[5];
+                var podOffsetX = side * ShipCubeSize * 3.22f;
+
+                CreatePodSectionProfile(previousProfile, podOffsetX, podZ[0], podRadius[0], podTop[0], podBottom[0], side);
+                for (var index = 1; index < podZ.Length; index++)
+                {
+                    CreatePodSectionProfile(currentProfile, podOffsetX, podZ[index], podRadius[index], podTop[index], podBottom[index], side);
+                    AppendShipProfileStrip(chunk, center, right, up, forward, previousProfile[0], previousProfile[1], currentProfile[1], currentProfile[0], ShipShadowColor);
+                    AppendShipProfileStrip(chunk, center, right, up, forward, previousProfile[1], previousProfile[2], currentProfile[2], currentProfile[1], ShipPrimaryColor);
+                    AppendShipProfileStrip(chunk, center, right, up, forward, previousProfile[2], previousProfile[3], currentProfile[3], currentProfile[2], ShipAccentColor);
+                    AppendShipProfileStrip(chunk, center, right, up, forward, previousProfile[3], previousProfile[4], currentProfile[4], currentProfile[3], ShipShadowColor);
+                    currentProfile.CopyTo(previousProfile);
                 }
+
+                AppendShipRibbon(
+                    chunk,
+                    center,
+                    right,
+                    up,
+                    forward,
+                    new Vector3(podOffsetX - (side * ShipCubeSize * 0.06f), -ShipCubeHeight * 0.08f, -ShipCubeSize * 3.74f),
+                    new Vector3(podOffsetX + (side * ShipCubeSize * 0.06f), -ShipCubeHeight * 0.08f, -ShipCubeSize * 3.74f),
+                    ShipCubeHeight * 0.16f,
+                    ShipGlowColor);
+            }
+        }
+
+        private void AppendShipCanopyFrameDetails(VoxelChunk chunk, Vector3 center, Vector3 right, Vector3 up, Vector3 forward)
+        {
+            AppendShipRibbon(
+                chunk,
+                center,
+                right,
+                up,
+                forward,
+                new Vector3(-ShipCubeSize * 1.18f, ShipCubeHeight * 0.7f, -ShipCubeSize * 0.08f),
+                new Vector3(-ShipCubeSize * 0.54f, ShipCubeHeight * 1.12f, ShipCubeSize * 2.92f),
+                ShipCubeHeight * 0.045f,
+                ShipShadowColor);
+            AppendShipRibbon(
+                chunk,
+                center,
+                right,
+                up,
+                forward,
+                new Vector3(ShipCubeSize * 1.18f, ShipCubeHeight * 0.7f, -ShipCubeSize * 0.08f),
+                new Vector3(ShipCubeSize * 0.54f, ShipCubeHeight * 1.12f, ShipCubeSize * 2.92f),
+                ShipCubeHeight * 0.045f,
+                ShipShadowColor);
+            AppendShipRibbon(
+                chunk,
+                center,
+                right,
+                up,
+                forward,
+                new Vector3(-ShipCubeSize * 0.24f, ShipCubeHeight * 1.18f, ShipCubeSize * 0.26f),
+                new Vector3(ShipCubeSize * 0.24f, ShipCubeHeight * 1.18f, ShipCubeSize * 0.26f),
+                ShipCubeHeight * 0.04f,
+                ShipShadowColor);
+            AppendShipRibbon(
+                chunk,
+                center,
+                right,
+                up,
+                forward,
+                new Vector3(0f, ShipCubeHeight * 1.08f, ShipCubeSize * 0.42f),
+                new Vector3(0f, ShipCubeHeight * 1.28f, ShipCubeSize * 3.02f),
+                ShipCubeHeight * 0.03f,
+                ShipTrimColor);
+        }
+
+        private void AppendShipRearFins(VoxelChunk chunk, Vector3 center, Vector3 right, Vector3 up, Vector3 forward)
+        {
+            for (var side = -1; side <= 1; side += 2)
+            {
+                var rootFront = new Vector3(side * ShipCubeSize * 1.62f, ShipCubeHeight * 0.52f, -ShipCubeSize * 1.58f);
+                var rootRear = new Vector3(side * ShipCubeSize * 1.72f, ShipCubeHeight * 0.5f, -ShipCubeSize * 3.6f);
+                var tipRear = new Vector3(side * ShipCubeSize * 2.28f, ShipCubeHeight * 1.82f, -ShipCubeSize * 4.72f);
+                var innerTip = new Vector3(side * ShipCubeSize * 1.92f, ShipCubeHeight * 1.42f, -ShipCubeSize * 3.46f);
+                AppendShipProfileStrip(chunk, center, right, up, forward, rootFront, rootRear, tipRear, innerTip, ShipAccentColor);
+                AppendShipTriangleLocal(chunk, center, right, up, forward, rootFront, innerTip, new Vector3(side * ShipCubeSize * 1.18f, ShipCubeHeight * 0.92f, -ShipCubeSize * 2.22f), ShipShadowColor);
+            }
+        }
+
+        private void AppendShipGlowPanels(VoxelChunk chunk, Vector3 center, Vector3 right, Vector3 up, Vector3 forward)
+        {
+            AppendShipRibbon(
+                chunk,
+                center,
+                right,
+                up,
+                forward,
+                new Vector3(-ShipCubeSize * 0.18f, ShipCubeHeight * 0.22f, ShipCubeSize * 5.02f),
+                new Vector3(ShipCubeSize * 0.18f, ShipCubeHeight * 0.22f, ShipCubeSize * 5.02f),
+                ShipCubeHeight * 0.22f,
+                ShipGlowColor);
+            AppendShipRibbon(
+                chunk,
+                center,
+                right,
+                up,
+                forward,
+                new Vector3(-ShipCubeSize * 0.12f, ShipCubeHeight * 0.46f, ShipCubeSize * 2.66f),
+                new Vector3(ShipCubeSize * 0.12f, ShipCubeHeight * 0.46f, ShipCubeSize * 2.66f),
+                ShipCubeHeight * 0.14f,
+                ShipGlowColor);
+            AppendShipRibbon(
+                chunk,
+                center,
+                right,
+                up,
+                forward,
+                new Vector3(-ShipCubeSize * 0.84f, ShipCubeHeight * 0.26f, ShipCubeSize * 3.58f),
+                new Vector3(ShipCubeSize * 0.84f, ShipCubeHeight * 0.34f, ShipCubeSize * 3.18f),
+                ShipCubeHeight * 0.1f,
+                ShipGlowColor);
+            AppendShipRibbon(
+                chunk,
+                center,
+                right,
+                up,
+                forward,
+                new Vector3(-ShipCubeSize * 0.42f, ShipCubeHeight * 0.58f, ShipCubeSize * 1.22f),
+                new Vector3(ShipCubeSize * 0.42f, ShipCubeHeight * 0.62f, ShipCubeSize * 0.74f),
+                ShipCubeHeight * 0.08f,
+                ShipGlowColor);
+            for (var side = -1; side <= 1; side += 2)
+            {
+                AppendShipRibbon(
+                    chunk,
+                    center,
+                    right,
+                    up,
+                    forward,
+                    new Vector3(side * ShipCubeSize * 2.38f, -ShipCubeHeight * 0.18f, ShipCubeSize * 2.18f),
+                    new Vector3(side * ShipCubeSize * 2.18f, -ShipCubeHeight * 0.06f, ShipCubeSize * 2.64f),
+                    ShipCubeHeight * 0.18f,
+                    ShipGlowColor);
+                AppendShipRibbon(
+                    chunk,
+                    center,
+                    right,
+                    up,
+                    forward,
+                    new Vector3(side * ShipCubeSize * 1.9f, ShipCubeHeight * 0.04f, ShipCubeSize * 1.64f),
+                    new Vector3(side * ShipCubeSize * 2.46f, ShipCubeHeight * 0.1f, ShipCubeSize * 0.48f),
+                    ShipCubeHeight * 0.08f,
+                    ShipGlowColor);
+                AppendShipRibbon(
+                    chunk,
+                    center,
+                    right,
+                    up,
+                    forward,
+                    new Vector3(side * ShipCubeSize * 2.64f, ShipCubeHeight * 0.06f, -ShipCubeSize * 0.96f),
+                    new Vector3(side * ShipCubeSize * 2.82f, ShipCubeHeight * 0.02f, -ShipCubeSize * 2.42f),
+                    ShipCubeHeight * 0.07f,
+                    ShipGlowColor);
+                AppendShipRibbon(
+                    chunk,
+                    center,
+                    right,
+                    up,
+                    forward,
+                    new Vector3(side * ShipCubeSize * 2.82f, -ShipCubeHeight * 0.08f, -ShipCubeSize * 3.54f),
+                    new Vector3(side * ShipCubeSize * 2.98f, -ShipCubeHeight * 0.08f, -ShipCubeSize * 4.18f),
+                    ShipCubeHeight * 0.09f,
+                    ShipGlowColor);
+            }
+        }
+
+        private void AppendShipSurfaceIntakes(VoxelChunk chunk, Vector3 center, Vector3 right, Vector3 up, Vector3 forward)
+        {
+            for (var side = -1; side <= 1; side += 2)
+            {
+                AppendShipQuadLocal(
+                    chunk,
+                    center,
+                    right,
+                    up,
+                    forward,
+                    new Vector3(side * ShipCubeSize * 1.86f, ShipCubeHeight * 0.14f, ShipCubeSize * 1.98f),
+                    new Vector3(side * ShipCubeSize * 2.48f, ShipCubeHeight * 0.08f, ShipCubeSize * 1.74f),
+                    new Vector3(side * ShipCubeSize * 2.18f, -ShipCubeHeight * 0.16f, ShipCubeSize * 0.74f),
+                    new Vector3(side * ShipCubeSize * 1.62f, -ShipCubeHeight * 0.04f, ShipCubeSize * 1.12f),
+                    ShipShadowColor);
+                AppendShipRibbon(
+                    chunk,
+                    center,
+                    right,
+                    up,
+                    forward,
+                    new Vector3(side * ShipCubeSize * 1.98f, ShipCubeHeight * 0.08f, ShipCubeSize * 1.88f),
+                    new Vector3(side * ShipCubeSize * 1.84f, -ShipCubeHeight * 0.08f, ShipCubeSize * 1.02f),
+                    ShipCubeHeight * 0.03f,
+                    ShipTrimColor);
+            }
+        }
+
+        private void AppendShipEngineRings(VoxelChunk chunk, Vector3 center, Vector3 right, Vector3 up, Vector3 forward)
+        {
+            for (var side = -1; side <= 1; side += 2)
+            {
+                var outerTop = new Vector3(side * ShipCubeSize * 3.02f, ShipCubeHeight * 0.18f, -ShipCubeSize * 3.68f);
+                var outerBottom = new Vector3(side * ShipCubeSize * 3.02f, -ShipCubeHeight * 0.26f, -ShipCubeSize * 3.68f);
+                var innerTop = new Vector3(side * ShipCubeSize * 2.72f, ShipCubeHeight * 0.14f, -ShipCubeSize * 3.38f);
+                var innerBottom = new Vector3(side * ShipCubeSize * 2.72f, -ShipCubeHeight * 0.18f, -ShipCubeSize * 3.38f);
+                AppendShipQuadLocal(chunk, center, right, up, forward, outerTop, innerTop, innerBottom, outerBottom, ShipAccentColor);
+                AppendShipRibbon(
+                    chunk,
+                    center,
+                    right,
+                    up,
+                    forward,
+                    new Vector3(side * ShipCubeSize * 2.92f, -ShipCubeHeight * 0.06f, -ShipCubeSize * 3.58f),
+                    new Vector3(side * ShipCubeSize * 2.76f, -ShipCubeHeight * 0.06f, -ShipCubeSize * 3.44f),
+                    ShipCubeHeight * 0.06f,
+                    ShipGlowColor);
+            }
+        }
+
+        private void AppendShipPanelLines(VoxelChunk chunk, Vector3 center, Vector3 right, Vector3 up, Vector3 forward)
+        {
+            AppendShipRibbon(
+                chunk,
+                center,
+                right,
+                up,
+                forward,
+                new Vector3(-ShipCubeSize * 0.06f, ShipCubeHeight * 0.58f, ShipCubeSize * 4.74f),
+                new Vector3(ShipCubeSize * 0.06f, ShipCubeHeight * 0.48f, -ShipCubeSize * 2.94f),
+                ShipCubeHeight * 0.032f,
+                ShipTrimColor);
+            AppendShipRibbon(
+                chunk,
+                center,
+                right,
+                up,
+                forward,
+                new Vector3(-ShipCubeSize * 0.14f, ShipCubeHeight * 0.2f, ShipCubeSize * 3.92f),
+                new Vector3(ShipCubeSize * 0.14f, ShipCubeHeight * 0.2f, ShipCubeSize * 1.54f),
+                ShipCubeHeight * 0.024f,
+                ShipTrimColor);
+
+            for (var side = -1; side <= 1; side += 2)
+            {
+                AppendShipRibbon(
+                    chunk,
+                    center,
+                    right,
+                    up,
+                    forward,
+                    new Vector3(side * ShipCubeSize * 0.84f, ShipCubeHeight * 0.44f, ShipCubeSize * 4.18f),
+                    new Vector3(side * ShipCubeSize * 2.18f, ShipCubeHeight * 0.22f, ShipCubeSize * 0.92f),
+                    ShipCubeHeight * 0.03f,
+                    ShipTrimColor);
+                AppendShipRibbon(
+                    chunk,
+                    center,
+                    right,
+                    up,
+                    forward,
+                    new Vector3(side * ShipCubeSize * 1.12f, ShipCubeHeight * 0.18f, ShipCubeSize * 2.22f),
+                    new Vector3(side * ShipCubeSize * 2.78f, ShipCubeHeight * 0.04f, -ShipCubeSize * 1.34f),
+                    ShipCubeHeight * 0.026f,
+                    ShipTrimColor);
+                AppendShipRibbon(
+                    chunk,
+                    center,
+                    right,
+                    up,
+                    forward,
+                    new Vector3(side * ShipCubeSize * 1.64f, ShipCubeHeight * 0.54f, -ShipCubeSize * 1.86f),
+                    new Vector3(side * ShipCubeSize * 2.12f, ShipCubeHeight * 1.12f, -ShipCubeSize * 3.98f),
+                    ShipCubeHeight * 0.03f,
+                    ShipTrimColor);
             }
 
-            AppendShipCube(chunk, center, right, up, forward, new Vector3(0f, -ShipCubeHeight * 0.72f, 0f), ShipPrimaryColor, ShipCubeSize * 0.95f, ShipCubeHeight * 0.6f);
+            for (var side = -1; side <= 1; side += 2)
+            {
+                AppendShipQuadLocal(
+                    chunk,
+                    center,
+                    right,
+                    up,
+                    forward,
+                    new Vector3(side * ShipCubeSize * 2.42f, ShipCubeHeight * 0.08f, ShipCubeSize * 1.96f),
+                    new Vector3(side * ShipCubeSize * 2.62f, ShipCubeHeight * 0.08f, ShipCubeSize * 1.82f),
+                    new Vector3(side * ShipCubeSize * 2.54f, ShipCubeHeight * 0.16f, ShipCubeSize * 1.58f),
+                    new Vector3(side * ShipCubeSize * 2.34f, ShipCubeHeight * 0.16f, ShipCubeSize * 1.7f),
+                    ShipTrimColor);
+                AppendShipQuadLocal(
+                    chunk,
+                    center,
+                    right,
+                    up,
+                    forward,
+                    new Vector3(side * ShipCubeSize * 2.74f, ShipCubeHeight * 0.02f, -ShipCubeSize * 2.24f),
+                    new Vector3(side * ShipCubeSize * 2.92f, ShipCubeHeight * 0.02f, -ShipCubeSize * 2.38f),
+                    new Vector3(side * ShipCubeSize * 2.82f, ShipCubeHeight * 0.12f, -ShipCubeSize * 2.62f),
+                    new Vector3(side * ShipCubeSize * 2.66f, ShipCubeHeight * 0.12f, -ShipCubeSize * 2.48f),
+                    ShipTrimColor);
+            }
+        }
+
+        private static void CreateHullSectionProfile(Span<Vector3> profile, float z, float halfWidth, float topY, float sideY, float bottomY)
+        {
+            var zWorld = z * ShipCubeSize;
+            var widthWorld = halfWidth * ShipCubeSize;
+            var topWorld = topY * ShipCubeHeight;
+            var sideWorld = sideY * ShipCubeHeight;
+            var bottomWorld = bottomY * ShipCubeHeight;
+            profile[0] = new Vector3(-widthWorld * 0.34f, bottomWorld, zWorld);
+            profile[1] = new Vector3(-widthWorld, sideWorld - (ShipCubeHeight * 0.08f), zWorld);
+            profile[2] = new Vector3(-widthWorld * 0.74f, sideWorld + ((topWorld - sideWorld) * 0.7f), zWorld);
+            profile[3] = new Vector3(0f, topWorld, zWorld);
+            profile[4] = new Vector3(widthWorld * 0.74f, sideWorld + ((topWorld - sideWorld) * 0.7f), zWorld);
+            profile[5] = new Vector3(widthWorld, sideWorld - (ShipCubeHeight * 0.08f), zWorld);
+            profile[6] = new Vector3(widthWorld * 0.34f, bottomWorld, zWorld);
+        }
+
+        private static void CreateHullBellyProfile(Span<Vector3> profile, float z, float halfWidth, float bottomY)
+        {
+            var zWorld = z * ShipCubeSize;
+            var widthWorld = halfWidth * ShipCubeSize;
+            var bottomWorld = bottomY * ShipCubeHeight;
+            profile[0] = new Vector3(-widthWorld * 0.34f, bottomWorld, zWorld);
+            profile[1] = new Vector3(0f, bottomWorld - (ShipCubeHeight * 0.18f), zWorld);
+            profile[2] = new Vector3(widthWorld * 0.34f, bottomWorld, zWorld);
+        }
+
+        private static void CreateCanopySectionProfile(Span<Vector3> profile, float z, float halfWidth, float baseY, float topY)
+        {
+            var zWorld = z * ShipCubeSize;
+            var widthWorld = halfWidth * ShipCubeSize;
+            var baseWorld = baseY * ShipCubeHeight;
+            var topWorld = topY * ShipCubeHeight;
+            profile[0] = new Vector3(-widthWorld * 0.78f, baseWorld, zWorld);
+            profile[1] = new Vector3(-widthWorld * 0.42f, baseWorld + ((topWorld - baseWorld) * 0.74f), zWorld);
+            profile[2] = new Vector3(0f, topWorld, zWorld);
+            profile[3] = new Vector3(widthWorld * 0.42f, baseWorld + ((topWorld - baseWorld) * 0.74f), zWorld);
+            profile[4] = new Vector3(widthWorld * 0.78f, baseWorld, zWorld);
+        }
+
+        private static void CreatePodSectionProfile(Span<Vector3> profile, float centerX, float z, float radius, float topY, float bottomY, int side)
+        {
+            var zWorld = z * ShipCubeSize;
+            var centerWorldX = centerX;
+            var radiusWorld = radius * ShipCubeSize;
+            var topWorld = topY * ShipCubeHeight;
+            var bottomWorld = bottomY * ShipCubeHeight;
+            var innerX = centerWorldX - (side * radiusWorld * 0.42f);
+            var outerX = centerWorldX + (side * radiusWorld * 0.58f);
+            profile[0] = new Vector3(innerX, bottomWorld, zWorld);
+            profile[1] = new Vector3(innerX, bottomWorld + ((topWorld - bottomWorld) * 0.58f), zWorld);
+            profile[2] = new Vector3(centerWorldX + (side * radiusWorld * 0.08f), topWorld, zWorld);
+            profile[3] = new Vector3(outerX, bottomWorld + ((topWorld - bottomWorld) * 0.64f), zWorld);
+            profile[4] = new Vector3(outerX, bottomWorld, zWorld);
+        }
+
+        private void AppendShipProfileStrip(VoxelChunk chunk, Vector3 center, Vector3 right, Vector3 up, Vector3 forward, Vector3 a0, Vector3 a1, Vector3 b1, Vector3 b0, Color color)
+        {
+            AppendShipQuadLocal(chunk, center, right, up, forward, a0, a1, b1, b0, color);
+        }
+
+        private void AppendShipRibbon(VoxelChunk chunk, Vector3 center, Vector3 right, Vector3 up, Vector3 forward, Vector3 start, Vector3 end, float halfWidth, Color color)
+        {
+            var localDirection = end - start;
+            if (localDirection.LengthSquared() < 0.0001f)
+            {
+                return;
+            }
+
+            localDirection.Normalize();
+            var localSide = Vector3.Cross(localDirection, Vector3.Up);
+            if (localSide.LengthSquared() < 0.0001f)
+            {
+                localSide = Vector3.Cross(localDirection, Vector3.Right);
+            }
+
+            localSide.Normalize();
+            localSide *= halfWidth;
+            AppendShipQuadLocal(chunk, center, right, up, forward, start - localSide, start + localSide, end + localSide, end - localSide, color);
+        }
+
+        private void AppendShipQuadLocal(VoxelChunk chunk, Vector3 center, Vector3 right, Vector3 up, Vector3 forward, Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, Color color)
+        {
+            AppendQuad(
+                chunk,
+                TransformLocalPoint(center, right, up, forward, v0),
+                TransformLocalPoint(center, right, up, forward, v1),
+                TransformLocalPoint(center, right, up, forward, v2),
+                TransformLocalPoint(center, right, up, forward, v3),
+                color);
+        }
+
+        private void AppendShipTriangleLocal(VoxelChunk chunk, Vector3 center, Vector3 right, Vector3 up, Vector3 forward, Vector3 v0, Vector3 v1, Vector3 v2, Color color)
+        {
+            AppendSafeTriangle(
+                chunk,
+                TransformLocalPoint(center, right, up, forward, v0),
+                TransformLocalPoint(center, right, up, forward, v1),
+                TransformLocalPoint(center, right, up, forward, v2),
+                color);
         }
 
         private void AppendPayload(VoxelChunk chunk, Vector3 shipCenter, Vector3 right, Vector3 up, Vector3 forward)
@@ -389,6 +836,7 @@ namespace PETAR_PlanetExplorer.Modules.Maps
 
         private struct ShipState
         {
+            public float CameraDistance;
             public Vector2 Velocity;
             public float Roll;
             public Vector3 PayloadOffset;

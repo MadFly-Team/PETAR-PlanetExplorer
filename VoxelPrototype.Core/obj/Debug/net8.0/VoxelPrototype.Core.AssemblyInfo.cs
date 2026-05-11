@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("VoxelPrototype.Core")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+6a2896ebbecd5da003599227c61de2c189c332ba")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8d69da830bc2d76263c9101584e309382b7d8a22")]
 [assembly: System.Reflection.AssemblyProductAttribute("VoxelPrototype.Core")]
 [assembly: System.Reflection.AssemblyTitleAttribute("VoxelPrototype.Core")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

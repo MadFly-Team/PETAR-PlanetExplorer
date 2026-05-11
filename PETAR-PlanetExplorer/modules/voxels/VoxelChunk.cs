@@ -47,6 +47,11 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
             return true;
         }
 
+        internal void SetBlockForBulkInitialization(int x, int y, int z, VoxelBlock block)
+        {
+            _blocks[GetIndex(x, y, z)] = block;
+        }
+
         public void MarkDirty()
         {
             _cachedVerticesByLod.Clear();

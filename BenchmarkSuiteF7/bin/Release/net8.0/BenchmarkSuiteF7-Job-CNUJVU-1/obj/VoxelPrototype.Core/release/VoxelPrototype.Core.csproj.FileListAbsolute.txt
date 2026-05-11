@@ -1,0 +1,12 @@
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuiteF7\bin\Release\net8.0\BenchmarkSuiteF7-Job-CNUJVU-1\bin\Release\net8.0\VoxelPrototype.Core.deps.json
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuiteF7\bin\Release\net8.0\BenchmarkSuiteF7-Job-CNUJVU-1\bin\Release\net8.0\VoxelPrototype.Core.dll
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuiteF7\bin\Release\net8.0\BenchmarkSuiteF7-Job-CNUJVU-1\bin\Release\net8.0\VoxelPrototype.Core.pdb
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuiteF7\bin\Release\net8.0\BenchmarkSuiteF7-Job-CNUJVU-1\obj\VoxelPrototype.Core\release\VoxelPrototype.Core.GeneratedMSBuildEditorConfig.editorconfig
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuiteF7\bin\Release\net8.0\BenchmarkSuiteF7-Job-CNUJVU-1\obj\VoxelPrototype.Core\release\VoxelPrototype.Core.AssemblyInfoInputs.cache
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuiteF7\bin\Release\net8.0\BenchmarkSuiteF7-Job-CNUJVU-1\obj\VoxelPrototype.Core\release\VoxelPrototype.Core.AssemblyInfo.cs
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuiteF7\bin\Release\net8.0\BenchmarkSuiteF7-Job-CNUJVU-1\obj\VoxelPrototype.Core\release\VoxelPrototype.Core.csproj.CoreCompileInputs.cache
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuiteF7\bin\Release\net8.0\BenchmarkSuiteF7-Job-CNUJVU-1\obj\VoxelPrototype.Core\release\VoxelPrototype.Core.sourcelink.json
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuiteF7\bin\Release\net8.0\BenchmarkSuiteF7-Job-CNUJVU-1\obj\VoxelPrototype.Core\release\VoxelPrototype.Core.dll
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuiteF7\bin\Release\net8.0\BenchmarkSuiteF7-Job-CNUJVU-1\obj\VoxelPrototype.Core\release\refint\VoxelPrototype.Core.dll
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuiteF7\bin\Release\net8.0\BenchmarkSuiteF7-Job-CNUJVU-1\obj\VoxelPrototype.Core\release\VoxelPrototype.Core.pdb
+D:\NewProjects\Games\PETAR-PlanetExplorer\Trunk\BenchmarkSuiteF7\bin\Release\net8.0\BenchmarkSuiteF7-Job-CNUJVU-1\obj\VoxelPrototype.Core\release\ref\VoxelPrototype.Core.dll

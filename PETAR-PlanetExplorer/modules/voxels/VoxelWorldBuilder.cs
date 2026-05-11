@@ -18,6 +18,7 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
         private const float CaveSeedXOffsetScale = 0.00825f;
         private const float CaveSeedYOffsetScale = -0.00525f;
         private const float CaveSeedZOffsetScale = 0.0055f;
+        private const float IntMaxValueReciprocal = 1f / int.MaxValue;
         private const int CaveNoiseSeedSalt = unchecked((int)0x51f15e23);
 
         public static VoxelWorld CreateFromHeightMap(ProceduralWorldMap worldMap)
@@ -33,6 +34,8 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
                 return voxelWorld;
             }
 
+            voxelWorld.HeightLimit = worldMap.MaxCubeColumn;
+
             SyncRegionFromHeightMap(voxelWorld, worldMap, 0, worldMap.Width - 1, 0, worldMap.Height - 1, progressCallback, 0f, 1f, "Calculating voxel chunks");
             return voxelWorld;
         }
@@ -44,6 +47,8 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
             {
                 return voxelWorld;
             }
+
+            voxelWorld.HeightLimit = worldMap.MaxCubeColumn;
 
             SyncRegionFromHeightMap(voxelWorld, worldMap, minWorldX, maxWorldX, minWorldY, maxWorldY);
             return voxelWorld;
@@ -104,12 +109,11 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
         private static void SyncColumn(VoxelWorld voxelWorld, ProceduralWorldMap worldMap, int worldX, int worldY)
         {
             var surfaceHeight = MathHelper.Max(worldMap.SampleVoxelHeight(worldX, worldY), ProceduralWorldMap.SeaLevel);
-            var topVoxel = GetSurfaceTopVoxel(surfaceHeight);
-            var topMaterial = ResolveTopMaterial(worldMap, topVoxel);
+            var topVoxel = GetSurfaceTopVoxel(surfaceHeight, voxelWorld.HeightLimit);
+            var topMaterial = ResolveTopMaterial(worldMap, topVoxel, voxelWorld.HeightLimit);
             var topBlock = new VoxelBlock(topMaterial);
             var soilBlock = new VoxelBlock(VoxelMaterial.Soil);
             var rockBlock = new VoxelBlock(VoxelMaterial.Rock);
-            var airBlock = new VoxelBlock(VoxelMaterial.Air);
             var seed = worldMap.Seed;
             var caveBandMinZ = topVoxel * CaveBandStart;
             var caveBandMaxZ = topVoxel * CaveBandEnd;
@@ -131,15 +135,15 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
             {
                 if (localZ == VoxelConstants.ChunkSize)
                 {
-                    currentChunk.MarkDirty();
                     currentChunk = voxelWorld.GetOrCreateChunkForBulkUpdate(new VoxelChunkKey(chunkX, chunkY, worldZ / VoxelConstants.ChunkSize));
                     localZ = 0;
                 }
 
-                var block = worldZ >= caveStartZ && worldZ <= caveEndZ && ValueNoise3D(caveSampleX, caveSampleY, (worldZ * CaveNoiseZScale) + caveSampleZOffset, caveSeed) > CaveThreshold
-                    ? airBlock
-                    : rockBlock;
-                currentChunk.SetBlockUnchecked(localX, localY, localZ, block);
+                if (worldZ < caveStartZ || worldZ > caveEndZ || ValueNoise3D(caveSampleX, caveSampleY, (worldZ * CaveNoiseZScale) + caveSampleZOffset, caveSeed) <= CaveThreshold)
+                {
+                    currentChunk.SetBlockForBulkInitialization(localX, localY, localZ, rockBlock);
+                }
+
                 localZ++;
             }
 
@@ -147,12 +151,11 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
             {
                 if (localZ == VoxelConstants.ChunkSize)
                 {
-                    currentChunk.MarkDirty();
                     currentChunk = voxelWorld.GetOrCreateChunkForBulkUpdate(new VoxelChunkKey(chunkX, chunkY, worldZ / VoxelConstants.ChunkSize));
                     localZ = 0;
                 }
 
-                currentChunk.SetBlockUnchecked(localX, localY, localZ, soilBlock);
+                currentChunk.SetBlockForBulkInitialization(localX, localY, localZ, soilBlock);
                 localZ++;
             }
 
@@ -160,30 +163,12 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
             {
                 if (localZ == VoxelConstants.ChunkSize)
                 {
-                    currentChunk.MarkDirty();
                     currentChunk = voxelWorld.GetOrCreateChunkForBulkUpdate(new VoxelChunkKey(chunkX, chunkY, worldZ / VoxelConstants.ChunkSize));
                     localZ = 0;
                 }
 
-                currentChunk.SetBlockUnchecked(localX, localY, localZ, topBlock);
-                localZ++;
-                worldZ++;
+                currentChunk.SetBlockForBulkInitialization(localX, localY, localZ, topBlock);
             }
-
-            for (; worldZ < VoxelConstants.WorldHeight; worldZ++)
-            {
-                if (localZ == VoxelConstants.ChunkSize)
-                {
-                    currentChunk.MarkDirty();
-                    currentChunk = voxelWorld.GetOrCreateChunkForBulkUpdate(new VoxelChunkKey(chunkX, chunkY, worldZ / VoxelConstants.ChunkSize));
-                    localZ = 0;
-                }
-
-                currentChunk.SetBlockUnchecked(localX, localY, localZ, airBlock);
-                localZ++;
-            }
-
-            currentChunk.MarkDirty();
         }
 
         private static VoxelMaterial ResolveMaterial(int worldZ, int topVoxel, VoxelMaterial topMaterial, float caveBandMinZ, float caveBandMaxZ, float caveSampleX, float caveSampleY, float caveSampleZOffset, int caveSeed)
@@ -211,9 +196,9 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
             return VoxelMaterial.Rock;
         }
 
-        private static VoxelMaterial ResolveTopMaterial(ProceduralWorldMap worldMap, int topVoxel)
+        private static VoxelMaterial ResolveTopMaterial(ProceduralWorldMap worldMap, int topVoxel, int heightLimit)
         {
-            var normalizedHeight = topVoxel / (float)(LandscapeHeightLimit - 1);
+            var normalizedHeight = topVoxel / (float)Math.Max(1, heightLimit - 1);
             if (normalizedHeight > 0.82f)
             {
                 return VoxelMaterial.Snow;
@@ -290,17 +275,19 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
             hash = (hash << 11) ^ hash;
             hash ^= z * 2147483647;
             hash = (hash << 7) ^ hash;
-            return ((hash & 0x7fffffff) / (float)int.MaxValue);
+            return (hash & 0x7fffffff) * IntMaxValueReciprocal;
         }
 
-        public static int GetSurfaceTopVoxel(float surfaceHeight)
+        public static int GetSurfaceTopVoxel(float surfaceHeight, int heightLimit)
         {
-            return Math.Clamp((int)MathF.Round(surfaceHeight * (LandscapeHeightLimit - 1)), 1, LandscapeHeightLimit - 1);
+            heightLimit = Math.Max(2, heightLimit);
+            return Math.Clamp((int)MathF.Round(surfaceHeight * (heightLimit - 1)), 1, heightLimit - 1);
         }
 
-        public static float GetRenderVerticalOrigin()
+        public static float GetRenderVerticalOrigin(int heightLimit)
         {
-            return ProceduralWorldMap.SeaLevel * (LandscapeHeightLimit - 1f);
+            heightLimit = Math.Max(2, heightLimit);
+            return ProceduralWorldMap.SeaLevel * (heightLimit - 1f);
         }
 
         private static int FloorDiv(int value, int divisor)

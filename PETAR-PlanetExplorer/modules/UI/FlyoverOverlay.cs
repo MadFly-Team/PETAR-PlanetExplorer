@@ -43,11 +43,6 @@ namespace PETAR_PlanetExplorer.Modules.UI
                 DrawCenteredShipMarker(spriteBatch, pixel, new Vector2(viewport.Width * 0.5f, viewport.Height * 0.5f));
             }
 
-            spriteBatch.Draw(pixel, model.MinimapRectangle, new Color(3, 8, 18, 200));
-            spriteBatch.Draw(model.HeightMapTexture, model.MinimapRectangle, Color.White * 0.92f);
-            DrawRectangleFrame(spriteBatch, pixel, model.MinimapRectangle, new Color(0, 220, 255), 2);
-            DrawFlightMarker(spriteBatch, pixel, model.MinimapRectangle, model.FlightPosition, model.WorldSize, new Color(255, 234, 112));
-
             DrawStyledText(spriteBatch, font, model.Title, model.TitlePosition, model.GlowColor, model.AccentColor, model.ShadowColor, model.TitleOrigin, 0.48f);
             DrawStyledText(spriteBatch, font, model.ControlsText, model.ControlsPosition, model.GlowColor * 0.45f, model.SubtitleColor, model.ShadowColor, model.ControlsOrigin, 0.26f);
             DrawStyledText(spriteBatch, font, model.AltitudeText, model.AltitudePosition, model.GlowColor * 0.35f, model.AccentColor, model.ShadowColor, Vector2.Zero, 0.22f);
@@ -61,17 +56,6 @@ namespace PETAR_PlanetExplorer.Modules.UI
             spriteBatch.Draw(pixel, new Rectangle((int)center.X - 2, (int)center.Y - 14, 4, 28), shipColor);
             spriteBatch.Draw(pixel, new Rectangle((int)center.X - 14, (int)center.Y - 2, 28, 4), shipColor);
             spriteBatch.Draw(pixel, new Rectangle((int)center.X - 1, (int)center.Y - 26, 2, 14), new Color(255, 120, 60));
-        }
-
-        private static void DrawFlightMarker(SpriteBatch spriteBatch, Texture2D pixel, Rectangle minimapRectangle, Vector2 flightPosition, Point worldSize, Color markerColor)
-        {
-            var markerX = minimapRectangle.X + (int)((flightPosition.X / worldSize.X) * minimapRectangle.Width);
-            var markerY = minimapRectangle.Y + (int)((flightPosition.Y / worldSize.Y) * minimapRectangle.Height);
-            var markerRectangle = new Rectangle(markerX - 3, markerY - 3, 6, 6);
-
-            spriteBatch.Draw(pixel, markerRectangle, markerColor);
-            spriteBatch.Draw(pixel, new Rectangle(markerX - 8, markerY, 16, 1), markerColor);
-            spriteBatch.Draw(pixel, new Rectangle(markerX, markerY - 8, 1, 16), markerColor);
         }
 
         private static void DrawRectangleFrame(SpriteBatch spriteBatch, Texture2D pixel, Rectangle rectangle, Color color, int thickness)
@@ -105,7 +89,6 @@ namespace PETAR_PlanetExplorer.Modules.UI
     public readonly record struct LoadingOverlayModel(float Progress, string Status, Color GlowColor, Color AccentColor, Color SubtitleColor, Color ShadowColor);
 
     public readonly record struct FlyoverHudModel(
-        Rectangle MinimapRectangle,
         string Title,
         Vector2 TitlePosition,
         Vector2 TitleOrigin,
@@ -119,8 +102,5 @@ namespace PETAR_PlanetExplorer.Modules.UI
         Color AccentColor,
         Color SubtitleColor,
         Color ShadowColor,
-        Texture2D HeightMapTexture,
-        Vector2 FlightPosition,
-        Point WorldSize,
         bool DrawCenteredShipMarker);
 }

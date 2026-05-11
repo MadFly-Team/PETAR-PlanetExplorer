@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
+using PETAR_PlanetExplorer.Modules.Maps;
 
 namespace PETAR_PlanetExplorer.Modules.Voxels
 {
@@ -9,6 +10,8 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
         private readonly Dictionary<VoxelChunkKey, VoxelChunk> _chunks = new();
 
         public IReadOnlyDictionary<VoxelChunkKey, VoxelChunk> Chunks => _chunks;
+
+        public int HeightLimit { get; set; } = WorldGenerationSettings.DefaultMaxCubeColumn;
 
         public VoxelChunk GetOrCreateChunk(VoxelChunkKey key)
         {
@@ -91,6 +94,8 @@ namespace PETAR_PlanetExplorer.Modules.Voxels
             {
                 return;
             }
+
+            HeightLimit = source.HeightLimit;
 
             foreach (var chunkEntry in source._chunks)
             {
